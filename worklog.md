@@ -1,32 +1,28 @@
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Full Production Audit & Fix of Meteo LMS (Next.js + Vercel)
+Task: Fix constant page refresh bug on courses page and all related infinite loop issues
 
 Work Log:
-- Extracted and analyzed the complete Meteo LMS project from uploaded zip
-- Identified 50+ issues across 6 categories: Critical, High, Medium, Low
-- Fixed Tailwind CSS v3/v4 configuration conflict (removed dead tailwind.config.ts)
-- Fixed broken certificate verify route (ash] → query parameter approach)
-- Fixed toast system (TOAST_REMOVE_DELAY 16min→5s, useEffect dependency bug)
-- Fixed all API routes (removed as never casts, added transactions, input validation, clamping)
-- Fixed security issues (removed hardcoded demo credentials, XSS prevention, password field types)
-- Fixed UI bugs (register label, avatar empty string guards, recharts dark mode)
-- Fixed authentication system (Bearer token flow verified working)
-- Fixed TypeScript configuration (strict mode, removed ignoreBuildErrors)
-- Created Vercel deployment configuration (vercel.json, .env.example, postinstall hook)
-- Created database seed script with demo accounts and sample data
-- Removed 12 unused dependencies to reduce bundle size
-- Fixed ESLint configuration (removed permissive rules, proper warnings)
-- Fixed all lint errors (0 errors, 25 warnings remaining)
-- Browser-verified login, dashboard, courses, quizzes, register pages — all working
+- Analyzed screenshot showing courses page stuck in infinite loading state (skeleton + "Загрузка...")
+- Cloned Meteo-LMS repository from GitHub
+- Read and analyzed all view components, hooks, and API routes
+- Identified ROOT CAUSE: `useTranslation()` in `src/lib/i18n.ts` creates a new `t` function reference on every render
+- This unstable `t` was in `useEffect` dependency arrays across 8+ views, causing infinite re-render loops
+- Also found `useToast()` had `[state]` in useEffect deps, causing unnecessary listener re-subscriptions
+- Found `auth/me` PATCH route had misleading indentation in catch block
+- Found `examples/websocket/` files importing missing `socket.io-client` and `socket.io` packages
+- Found `certificates-view.tsx` passing non-existent `debouncedSearch` prop
+- Found multiple missing npm dependencies (embla-carousel-react, vaul, input-otp, etc.)
 
 Stage Summary:
-- All 50+ identified issues fixed
-- Login/Logout/Session flow verified working via API and browser
-- Zero console errors in browser testing
-- Zero ESLint errors
-- All API endpoints returning correct responses (no 500s)
-- Seed data with 3 demo accounts created
-- Vercel deployment configuration added
-- Fixed archive: /home/z/my-project/download/Meteo-LMS-Fixed.tar.gz (155K, 156 files)
+- Fixed `useTranslation()` to use `useCallback` with `[lang]` dependency — stable `t` reference
+- Fixed `useToast()` useEffect dependency from `[state]` to `[]`
+- Removed unstable `toast` and `t` from useEffect deps in: courses-view, quizzes-view, library-view, library-detail-view, course-detail-view, certificates-view (3 locations)
+- Removed unused `toast` from `toggleBookmark` useCallback deps in library-view
+- Fixed `auth/me/route.ts` PATCH catch block indentation
+- Disabled `examples/websocket/` files (renamed to .disabled)
+- Excluded `examples/` from tsconfig.json
+- Removed `debouncedSearch` prop from certificates-view JSX
+- Installed all missing npm dependencies
+- Build now passes successfully (all routes compile and type-check)
