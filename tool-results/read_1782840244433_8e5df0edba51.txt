@@ -1,0 +1,887 @@
+    50→    50→    50→}
+    51→    51→    51→
+    52→    52→    52→interface CourseDetail extends Course {
+    53→    53→    53→  sections: CourseSection[]
+    54→    54→    54→  lessons: LessonWithLock[]
+    55→    55→    55→  tutor?: {
+    56→    56→    56→    id: string
+    57→    57→    57→    firstName: string
+    58→    58→    58→    lastName: string
+    59→    59→    59→    middleName?: string | null
+    60→    60→    60→    position?: string | null
+    61→    61→    61→    department?: string | null
+    62→    62→    62→    avatarUrl?: string | null
+    63→    63→    63→  } | null
+    64→    64→    64→  enrollment?: {
+    65→    65→    65→    id: string
+    66→    66→    66→    progress: number
+    67→    67→    67→    status: string
+    68→    68→    68→    startedAt: string
+    69→    69→    69→    completedAt?: string | null
+    70→    70→    70→    deadlineAt?: string | null
+    71→    71→    71→  } | null
+    72→    72→    72→}
+    73→    73→    73→
+    74→    74→    74→interface DetailResponse {
+    75→    75→    75→  status: string
+    76→    76→    76→  data: CourseDetail
+    77→    77→    77→}
+    78→    78→    78→
+    79→    79→    79→const LEVEL_COLORS: Record<string, string> = {
+    80→    80→    80→  beginner: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    81→    81→    81→  intermediate: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    82→    82→    82→  advanced: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+    83→    83→    83→}
+    84→    84→    84→
+    85→    85→    85→const LOCALE_MAP: Record<Language, string> = {
+    86→    86→    86→  uz: 'uz-UZ',
+    87→    87→    87→  ru: 'ru-RU',
+    88→    88→    88→  en: 'en-US',
+    89→    89→    89→}
+    90→    90→    90→
+    91→    91→    91→type TFunc = (key: string) => string
+    92→    92→    92→
+    93→    93→    93→function LessonTypeIcon({ type, className }: { type: string; className?: string }) {
+    94→    94→    94→  switch (type) {
+    95→    95→    95→    case 'video': return <PlayCircle className={className} />
+    96→    96→    96→    case 'pdf': return <File className={className} />
+    97→    97→    97→    case 'assignment': return <ClipboardList className={className} />
+    98→    98→    98→    default: return <FileText className={className} />
+    99→    99→    99→  }
+   100→   100→   100→}
+   101→   101→   101→
+   102→   102→   102→function formatDuration(min: number, t: TFunc): string {
+   103→   103→   103→  if (min < 60) return `${min} ${t('time.minutes_short')}`
+   104→   104→   104→  const h = Math.floor(min / 60)
+   105→   105→   105→  const m = min % 60
+   106→   106→   106→  return m ? `${h} ${t('common.hours')} ${m} ${t('time.minutes_short')}` : `${h} ${t('common.hours')}`
+   107→   107→   107→}
+   108→   108→   108→
+   109→   109→   109→function levelLabel(level: string, t: TFunc): string {
+   110→   110→   110→  return t(`courses.level.${level}`) || level
+   111→   111→   111→}
+   112→   112→   112→
+   113→   113→   113→export function CourseDetailView() {
+   114→   114→   114→  const user = useAuth((s) => s.user)!
+   115→   115→   115→  const params = useNav((s) => s.params)
+   116→   116→   116→  const navigate = useNav((s) => s.navigate)
+   117→   117→   117→  const { t, lang } = useTranslation()
+   118→   118→   118→  const { toast } = useToast()
+   119→   119→   119→  const courseId = params.id
+   120→   120→   120→
+   121→   121→   121→  const [course, setCourse] = useState<CourseDetail | null>(null)
+   122→   122→   122→  const [loading, setLoading] = useState(true)
+   123→   123→   123→  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null)
+   124→   124→   124→  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+   125→   125→   125→
+   126→   126→   126→  // Fetch course detail
+   127→   127→   127→  useEffect(() => {
+   128→   128→   128→    if (!courseId) return
+   129→   129→   129→    let cancelled = false
+   130→   130→   130→    // Defer setState to avoid synchronous state update in effect
+   131→   131→   131→    Promise.resolve().then(() => {
+   132→   132→   132→      if (!cancelled) setLoading(true)
+   133→   133→   133→    })
+   134→   134→   134→    api
+   135→   135→   135→      .get<DetailResponse>(`/courses/${courseId}`)
+   136→   136→   136→      .then((r) => {
+   137→   137→   137→        if (cancelled) return
+   138→   138→   138→        setCourse(r.data)
+   139→   139→   139→        // Auto-select first unlocked lesson
+   140→   140→   140→        const firstLesson = r.data.sections
+   141→   141→   141→          .flatMap((s) => s.lessons)
+   142→   142→   142→          .find((l) => !l.isLocked)
+   143→   143→   143→        if (firstLesson) setSelectedLessonId(firstLesson.id)
+   144→   144→   144→      })
+   145→   145→   145→      .catch((e) => {
+   146→   146→   146→        if (cancelled) return
+   147→   147→   147→        toast({
+   148→   148→   148→          title: t('common.error'),
+   149→   149→   149→          description: e instanceof Error ? e.message : t('courses.loadError'),
+   150→   150→   150→          variant: 'destructive',
+   151→   151→   151→        })
+   152→   152→   152→      })
+   153→   153→   153→      .finally(() => {
+   154→   154→   154→        if (!cancelled) setLoading(false)
+   155→   155→   155→      })
+   156→   156→   156→    return () => {
+   157→   157→   157→      cancelled = true
+   158→   158→   158→    }
+   159→   159→   159→  }, [courseId])
+   160→   160→   160→
+   161→   161→   161→  const isEnrolled = !!course?.enrollment
+   162→   162→   162→  const isOwner = user.role === 'admin' || (user.role === 'tutor' && course?.tutorId === user.id)
+   163→   163→   163→
+   164→   164→   164→  // Find selected lesson
+   165→   165→   165→  const selectedLesson = useMemo(() => {
+   166→   166→   166→    if (!course || !selectedLessonId) return null
+   167→   167→   167→    return (
+   168→   168→   168→      course.sections.flatMap((s) => s.lessons).find((l) => l.id === selectedLessonId) ??
+   169→   169→   169→      course.lessons.find((l) => l.id === selectedLessonId) ??
+   170→   170→   170→      null
+   171→   171→   171→    )
+   172→   172→   172→  }, [course, selectedLessonId])
+   173→   173→   173→
+   174→   174→   174→  const handleEnroll = async () => {
+   175→   175→   175→    if (!courseId) return
+   176→   176→   176→    try {
+   177→   177→   177→      await api.post(`/courses/${courseId}/enroll`)
+   178→   178→   178→      toast({ title: t('common.congrats'), description: t('courses.enrollSuccess') })
+   179→   179→   179→      // Refetch course detail to get enrollment + unlock lessons
+   180→   180→   180→      const r = await api.get<DetailResponse>(`/courses/${courseId}`)
+   181→   181→   181→      setCourse(r.data)
+   182→   182→   182→    } catch (e) {
+   183→   183→   183→      toast({
+   184→   184→   184→        title: t('common.error'),
+   185→   185→   185→        description: e instanceof Error ? e.message : t('courses.enrollError'),
+   186→   186→   186→        variant: 'destructive',
+   187→   187→   187→      })
+   188→   188→   188→    }
+   189→   189→   189→  }
+   190→   190→   190→
+   191→   191→   191→  // Optimistically update lesson progress in local state
+   192→   192→   192→  const updateLessonInState = useCallback(
+   193→   193→   193→    (lessonId: string, updater: (l: LessonWithLock) => LessonWithLock) => {
+   194→   194→   194→      setCourse((prev) => {
+   195→   195→   195→        if (!prev) return prev
+   196→   196→   196→        return {
+   197→   197→   197→          ...prev,
+   198→   198→   198→          sections: prev.sections.map((s) => ({
+   199→   199→   199→            ...s,
+   200→   200→   200→            lessons: s.lessons.map((l) => (l.id === lessonId ? updater(l) : l)),
+   201→   201→   201→          })),
+   202→   202→   202→          lessons: prev.lessons.map((l) => (l.id === lessonId ? updater(l) : l)),
+   203→   203→   203→        }
+   204→   204→   204→      })
+   205→   205→   205→    },
+   206→   206→   206→    []
+   207→   207→   207→  )
+   208→   208→   208→
+   209→   209→   209→  const handleMarkComplete = async (lessonId: string) => {
+   210→   210→   210→    if (!courseId) return
+   211→   211→   211→    // Optimistic update
+   212→   212→   212→    updateLessonInState(lessonId, (l) => ({
+   213→   213→   213→      ...l,
+   214→   214→   214→      progress: { isCompleted: true, watchTimeSec: l.progress?.watchTimeSec ?? 0, lastPosition: l.progress?.lastPosition ?? 0 },
+   215→   215→   215→    }))
+   216→   216→   216→
+   217→   217→   217→    try {
+   218→   218→   218→      const r = await api.post<{
+   219→   219→   219→        data: { courseProgress: number; completedLessons: number; totalLessons: number; enrollmentStatus: string }
+   220→   220→   220→      }>(`/courses/${courseId}/progress`, {
+   221→   221→   221→        lessonId,
+   222→   222→   222→        isCompleted: true,
+   223→   223→   223→      })
+   224→   224→   224→      // Update enrollment progress
+   225→   225→   225→      setCourse((prev) => prev ? {
+   226→   226→   226→        ...prev,
+   227→   227→   227→        enrollment: prev.enrollment ? {
+   228→   228→   228→          ...prev.enrollment,
+   229→   229→   229→          progress: r.data.courseProgress,
+   230→   230→   230→          status: r.data.enrollmentStatus,
+   231→   231→   231→        } : prev.enrollment,
+   232→   232→   232→      } : prev)
+   233→   233→   233→
+   234→   234→   234→      if (r.data.courseProgress >= 100) {
+   235→   235→   235→        toast({
+   236→   236→   236→          title: t('courses.completedCongrats'),
+   237→   237→   237→          description: t('courses.completedDesc'),
+   238→   238→   238→        })
+   239→   239→   239→      } else {
+   240→   240→   240→        toast({ title: t('courses.lessonCompleted'), description: `${t('courses.courseProgressIs')} ${r.data.courseProgress}%` })
+   241→   241→   241→      }
+   242→   242→   242→    } catch (e) {
+   243→   243→   243→      // Revert on error
+   244→   244→   244→      updateLessonInState(lessonId, (l) => ({
+   245→   245→   245→        ...l,
+   246→   246→   246→        progress: { isCompleted: false, watchTimeSec: l.progress?.watchTimeSec ?? 0, lastPosition: l.progress?.lastPosition ?? 0 },
+   247→   247→   247→      }))
+   248→   248→   248→      toast({
+   249→   249→   249→        title: t('common.error'),
+   250→   250→   250→        description: e instanceof Error ? e.message : t('courses.progressSaveError'),
+   251→   251→   251→        variant: 'destructive',
+   252→   252→   252→      })
+   253→   253→   253→    }
+   254→   254→   254→  }
+   255→   255→   255→
+   256→   256→   256→  if (loading) {
+   257→   257→   257→    return (
+   258→   258→   258→      <div className="space-y-4">
+   259→   259→   259→        <Skeleton className="h-4 w-32" />
+   260→   260→   260→        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   261→   261→   261→          <div className="lg:col-span-2 space-y-4">
+   262→   262→   262→            <Skeleton className="h-64 w-full rounded-xl" />
+   263→   263→   263→            <Skeleton className="h-8 w-3/4" />
+   264→   264→   264→            <Skeleton className="h-32 w-full" />
+   265→   265→   265→          </div>
+   266→   266→   266→          <Skeleton className="h-96 w-full rounded-xl" />
+   267→   267→   267→        </div>
+   268→   268→   268→      </div>
+   269→   269→   269→    )
+   270→   270→   270→  }
+   271→   271→   271→
+   272→   272→   272→  if (!course) {
+   273→   273→   273→    return (
+   274→   274→   274→      <Card className="p-12">
+   275→   275→   275→        <div className="flex flex-col items-center text-center gap-3">
+   276→   276→   276→          <BookOpen className="w-12 h-12 text-muted-foreground" />
+   277→   277→   277→          <h3 className="font-semibold text-lg">{t('courses.notFound')}</h3>
+   278→   278→   278→          <Button variant="outline" onClick={() => navigate('courses')}>
+   279→   279→   279→            <ArrowLeft className="w-4 h-4" /> {t('courses.backToCourses')}
+   280→   280→   280→          </Button>
+   281→   281→   281→        </div>
+   282→   282→   282→      </Card>
+   283→   283→   283→    )
+   284→   284→   284→  }
+   285→   285→   285→
+   286→   286→   286→  const totalLessons = course._count?.lessons ?? course.sections.reduce((s, sec) => s + sec.lessons.length, 0)
+   287→   287→   287→  const completedLessons = course.sections
+   288→   288→   288→    .flatMap((s) => s.lessons)
+   289→   289→   289→    .filter((l) => l.progress?.isCompleted).length
+   290→   290→   290→
+   291→   291→   291→  return (
+   292→   292→   292→    <div className="space-y-4">
+   293→   293→   293→      {/* Back button */}
+   294→   294→   294→      <Button variant="ghost" size="sm" onClick={() => navigate('courses')}>
+   295→   295→   295→        <ArrowLeft className="w-4 h-4" /> {t('nav.courses')}
+   296→   296→   296→      </Button>
+   297→   297→   297→
+   298→   298→   298→      {/* Hero section */}
+   299→   299→   299→      <Card className="overflow-hidden pt-0 gap-0">
+   300→   300→   300→        <div className="relative h-48 sm:h-64 lg:h-72 bg-muted">
+   301→   301→   301→          {course.thumbnailUrl ? (
+   302→   302→   302→            <img
+   303→   303→   303→              src={course.thumbnailUrl}
+   304→   304→   304→              alt={course.title}
+   305→   305→   305→              className="w-full h-full object-cover"
+   306→   306→   306→            />
+   307→   307→   307→          ) : (
+   308→   308→   308→            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/30 to-primary/5">
+   309→   309→   309→              <BookOpen className="w-16 h-16 text-primary/60" />
+   310→   310→   310→            </div>
+   311→   311→   311→          )}
+   312→   312→   312→          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+   313→   313→   313→
+   314→   314→   314→          {/* Top badges */}
+   315→   315→   315→          <div className="absolute top-3 left-3 flex flex-wrap gap-2">
+   316→   316→   316→            <Badge className="bg-white/95 text-foreground backdrop-blur">
+   317→   317→   317→              {course.category?.icon} {course.category?.name ?? t('courses.noCategory')}
+   318→   318→   318→            </Badge>
+   319→   319→   319→            <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full', LEVEL_COLORS[course.level])}>
+   320→   320→   320→              {levelLabel(course.level, t)}
+   321→   321→   321→            </span>
+   322→   322→   322→            {course.isMandatory && (
+   323→   323→   323→              <Badge className="bg-primary text-primary-foreground">
+   324→   324→   324→                <GraduationCap className="w-3 h-3" /> {t('common.mandatory')}
+   325→   325→   325→              </Badge>
+   326→   326→   326→            )}
+   327→   327→   327→          </div>
+   328→   328→   328→
+   329→   329→   329→          {/* Title overlay */}
+   330→   330→   330→          <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 text-white">
+   331→   331→   331→            <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold leading-tight">{course.title}</h1>
+   332→   332→   332→            <div className="flex flex-wrap items-center gap-4 mt-2 text-sm">
+   333→   333→   333→              {course.tutor && (
+   334→   334→   334→                <div className="flex items-center gap-2">
+   335→   335→   335→                  <Avatar className="w-6 h-6 ring-2 ring-white/50">
+   336→   336→   336→                    <AvatarFallback className="bg-primary text-primary-foreground text-[10px]">
+   337→   337→   337→                      {course.tutor.firstName[0]}{course.tutor.lastName[0]}
+   338→   338→   338→                    </AvatarFallback>
+   339→   339→   339→                  </Avatar>
+   340→   340→   340→                  <span className="font-medium">
+   341→   341→   341→                    {course.tutor.firstName} {course.tutor.lastName}
+   342→   342→   342→                  </span>
+   343→   343→   343→                </div>
+   344→   344→   344→              )}
+   345→   345→   345→              <span className="flex items-center gap-1">
+   346→   346→   346→                <Clock className="w-4 h-4" /> {course.durationHours} {t('common.hours')}
+   347→   347→   347→              </span>
+   348→   348→   348→              <span className="flex items-center gap-1">
+   349→   349→   349→                <BookOpen className="w-4 h-4" /> {totalLessons} {t('common.lessons')}
+   350→   350→   350→              </span>
+   351→   351→   351→              <span className="flex items-center gap-1">
+   352→   352→   352→                <Users className="w-4 h-4" /> {course._count?.enrollments ?? 0} {t('common.students')}
+   353→   353→   353→              </span>
+   354→   354→   354→            </div>
+   355→   355→   355→          </div>
+   356→   356→   356→        </div>
+   357→   357→   357→
+   358→   358→   358→        {/* Hero footer */}
+   359→   359→   359→        <CardContent className="p-4 sm:p-6">
+   360→   360→   360→          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+   361→   361→   361→            <div className="flex-1 min-w-0">
+   362→   362→   362→              <p className="text-sm text-muted-foreground line-clamp-2">
+   363→   363→   363→                {course.description ?? t('courses.noDescription')}
+   364→   364→   364→              </p>
+   365→   365→   365→            </div>
+   366→   366→   366→            <div className="flex-shrink-0">
+   367→   367→   367→              {user.role === 'student' && !isEnrolled && (
+   368→   368→   368→                <Button onClick={handleEnroll} size="lg">
+   369→   369→   369→                  <GraduationCap className="w-4 h-4" /> {t('courses.enroll')}
+   370→   370→   370→                </Button>
+   371→   371→   371→              )}
+   372→   372→   372→              {user.role === 'student' && isEnrolled && (
+   373→   373→   373→                <div className="text-right">
+   374→   374→   374→                  <div className="text-xs text-muted-foreground">{t('courses.yourProgress')}</div>
+   375→   375→   375→                  <div className="text-2xl font-bold text-primary">{course.enrollment!.progress}%</div>
+   376→   376→   376→                </div>
+   377→   377→   377→              )}
+   378→   378→   378→              {(user.role === 'tutor' || user.role === 'admin') && (
+   379→   379→   379→                <Badge variant="secondary" className="capitalize">
+   380→   380→   380→                  {t('common.status')}: {course.status}
+   381→   381→   381→                </Badge>
+   382→   382→   382→              )}
+   383→   383→   383→            </div>
+   384→   384→   384→          </div>
+   385→   385→   385→
+   386→   386→   386→          {/* Progress bar for enrolled students */}
+   387→   387→   387→          {isEnrolled && (
+   388→   388→   388→            <div className="mt-4">
+   389→   389→   389→              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+   390→   390→   390→                <span>{t('courses.progress')}</span>
+   391→   391→   391→                <span>{completedLessons} / {totalLessons} {t('courses.lessonsCompletedSuffix')}</span>
+   392→   392→   392→              </div>
+   393→   393→   393→              <Progress value={course.enrollment!.progress} className="h-2" />
+   394→   394→   394→              {course.enrollment!.deadlineAt && (
+   395→   395→   395→                <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+   396→   396→   396→                  <Calendar className="w-3.5 h-3.5" />
+   397→   397→   397→                  {t('courses.deadline')} {new Date(course.enrollment!.deadlineAt!).toLocaleDateString(LOCALE_MAP[lang])}
+   398→   398→   398→                </div>
+   399→   399→   399→              )}
+   400→   400→   400→            </div>
+   401→   401→   401→          )}
+   402→   402→   402→        </CardContent>
+   403→   403→   403→      </Card>
+   404→   404→   404→
+   405→   405→   405→      {/* Main layout: sidebar + content */}
+   406→   406→   406→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+   407→   407→   407→        {/* Mobile: lesson list toggle */}
+   408→   408→   408→        <div className="lg:hidden">
+   409→   409→   409→          <Sheet open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen}>
+   410→   410→   410→            <SheetTrigger asChild>
+   411→   411→   411→              <Button variant="outline" className="w-full">
+   412→   412→   412→                <Menu className="w-4 h-4" /> {t('courses.lessonList')}
+   413→   413→   413→              </Button>
+   414→   414→   414→            </SheetTrigger>
+   415→   415→   415→            <SheetContent side="left" className="w-[85vw] max-w-sm p-0 overflow-y-auto">
+   416→   416→   416→              <LessonSidebar
+   417→   417→   417→                course={course}
+   418→   418→   418→                selectedLessonId={selectedLessonId}
+   419→   419→   419→                onSelect={(id) => {
+   420→   420→   420→                  setSelectedLessonId(id)
+   421→   421→   421→                  setMobileSidebarOpen(false)
+   422→   422→   422→                }}
+   423→   423→   423→                isEnrolled={isEnrolled}
+   424→   424→   424→                completedLessons={completedLessons}
+   425→   425→   425→                totalLessons={totalLessons}
+   426→   426→   426→              />
+   427→   427→   427→            </SheetContent>
+   428→   428→   428→          </Sheet>
+   429→   429→   429→        </div>
+   430→   430→   430→
+   431→   431→   431→        {/* Lesson viewer (main) */}
+   432→   432→   432→        <div className="lg:col-span-2 order-1 lg:order-none">
+   433→   433→   433→          {selectedLesson ? (
+   434→   434→   434→            <LessonViewer
+   435→   435→   435→              key={selectedLesson.id}
+   436→   436→   436→              lesson={selectedLesson}
+   437→   437→   437→              isEnrolled={isEnrolled || isOwner}
+   438→   438→   438→              courseId={course.id}
+   439→   439→   439→              onMarkComplete={() => handleMarkComplete(selectedLesson.id)}
+   440→   440→   440→              onProgress={updateLessonInState}
+   441→   441→   441→            />
+   442→   442→   442→          ) : (
+   443→   443→   443→            <Card className="p-8">
+   444→   444→   444→              <div className="flex flex-col items-center text-center gap-3">
+   445→   445→   445→                <BookOpen className="w-12 h-12 text-muted-foreground" />
+   446→   446→   446→                <h3 className="font-semibold text-lg">{t('courses.selectLesson')}</h3>
+   447→   447→   447→                <p className="text-sm text-muted-foreground max-w-md">
+   448→   448→   448→                  {t('courses.selectLessonDesc')}
+   449→   449→   449→                </p>
+   450→   450→   450→                {!isEnrolled && user.role === 'student' && (
+   451→   451→   451→                  <div className="mt-2 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 max-w-md">
+   452→   452→   452→                    <Lock className="w-5 h-5 text-amber-600 mx-auto mb-2" />
+   453→   453→   453→                    <p className="text-sm text-amber-700 dark:text-amber-400">
+   454→   454→   454→                      {t('courses.enrollToView')}
+   455→   455→   455→                    </p>
+   456→   456→   456→                  </div>
+   457→   457→   457→                )}
+   458→   458→   458→              </div>
+   459→   459→   459→            </Card>
+   460→   460→   460→          )}
+   461→   461→   461→
+   462→   462→   462→          {/* Course info panel below viewer */}
+   463→   463→   463→          <CourseInfoPanel course={course} isEnrolled={isEnrolled} />
+   464→   464→   464→        </div>
+   465→   465→   465→
+   466→   466→   466→        {/* Desktop sidebar */}
+   467→   467→   467→        <div className="hidden lg:block order-2">
+   468→   468→   468→          <Card className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-hidden">
+   469→   469→   469→            <LessonSidebar
+   470→   470→   470→              course={course}
+   471→   471→   471→              selectedLessonId={selectedLessonId}
+   472→   472→   472→              onSelect={setSelectedLessonId}
+   473→   473→   473→              isEnrolled={isEnrolled}
+   474→   474→   474→              completedLessons={completedLessons}
+   475→   475→   475→              totalLessons={totalLessons}
+   476→   476→   476→            />
+   477→   477→   477→          </Card>
+   478→   478→   478→        </div>
+   479→   479→   479→      </div>
+   480→   480→   480→    </div>
+   481→   481→   481→  )
+   482→   482→   482→}
+   483→   483→   483→
+   484→   484→   484→function LessonSidebar({
+   485→   485→   485→  course,
+   486→   486→   486→  selectedLessonId,
+   487→   487→   487→  onSelect,
+   488→   488→   488→  isEnrolled,
+   489→   489→   489→  completedLessons,
+   490→   490→   490→  totalLessons,
+   491→   491→   491→}: {
+   492→   492→   492→  course: CourseDetail
+   493→   493→   493→  selectedLessonId: string | null
+   494→   494→   494→  onSelect: (id: string) => void
+   495→   495→   495→  isEnrolled: boolean
+   496→   496→   496→  completedLessons: number
+   497→   497→   497→  totalLessons: number
+   498→   498→   498→}) {
+   499→   499→   499→  const { t } = useTranslation()
+   500→   500→   500→  return (
+   501→   501→   501→    <div className="flex flex-col h-full">
+   502→   502→   502→      <CardHeader className="border-b">
+   503→   503→   503→        <CardTitle className="text-base flex items-center gap-2">
+   504→   504→   504→          <BookOpen className="w-4 h-4" /> {t('courses.lessons')}
+   505→   505→   505→        </CardTitle>
+   506→   506→   506→        <CardDescription className="text-xs">
+   507→   507→   507→          {completedLessons} / {totalLessons} {t('courses.lessonsCompletedSuffix')}
+   508→   508→   508→          {!isEnrolled && ` • ${t('courses.enrollPrompt')}`}
+   509→   509→   509→        </CardDescription>
+   510→   510→   510→        <Progress value={totalLessons ? (completedLessons / totalLessons) * 100 : 0} className="h-1.5 mt-2" />
+   511→   511→   511→      </CardHeader>
+   512→   512→   512→      <ScrollArea className="flex-1 max-h-[calc(100vh-12rem)]">
+   513→   513→   513→        <div className="p-2">
+   514→   514→   514→          {course.sections.map((section) => (
+   515→   515→   515→            <div key={section.id} className="mb-3">
+   516→   516→   516→              <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+   517→   517→   517→                {section.title}
+   518→   518→   518→              </div>
+   519→   519→   519→              <div className="space-y-0.5">
+   520→   520→   520→                {section.lessons.map((lesson) => (
+   521→   521→   521→                  <LessonListItem
+   522→   522→   522→                    key={lesson.id}
+   523→   523→   523→                    lesson={lesson}
+   524→   524→   524→                    active={lesson.id === selectedLessonId}
+   525→   525→   525→                    onClick={() => !lesson.isLocked && onSelect(lesson.id)}
+   526→   526→   526→                  />
+   527→   527→   527→                ))}
+   528→   528→   528→              </div>
+   529→   529→   529→            </div>
+   530→   530→   530→          ))}
+   531→   531→   531→          {course.sections.length === 0 && (
+   532→   532→   532→            <div className="p-4 text-center text-sm text-muted-foreground">
+   533→   533→   533→              {t('courses.noLessons')}
+   534→   534→   534→            </div>
+   535→   535→   535→          )}
+   536→   536→   536→        </div>
+   537→   537→   537→      </ScrollArea>
+   538→   538→   538→    </div>
+   539→   539→   539→  )
+   540→   540→   540→}
+   541→   541→   541→
+   542→   542→   542→function LessonListItem({
+   543→   543→   543→  lesson,
+   544→   544→   544→  active,
+   545→   545→   545→  onClick,
+   546→   546→   546→}: {
+   547→   547→   547→  lesson: LessonWithLock
+   548→   548→   548→  active: boolean
+   549→   549→   549→  onClick: () => void
+   550→   550→   550→}) {
+   551→   551→   551→  const { t } = useTranslation()
+   552→   552→   552→  const isCompleted = lesson.progress?.isCompleted
+   553→   553→   553→  const isLocked = lesson.isLocked
+   554→   554→   554→
+   555→   555→   555→  return (
+   556→   556→   556→    <button
+   557→   557→   557→      onClick={onClick}
+   558→   558→   558→      disabled={isLocked}
+   559→   559→   559→      className={cn(
+   560→   560→   560→        'w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-left',
+   561→   561→   561→        active
+   562→   562→   562→          ? 'bg-primary/10 text-primary font-medium'
+   563→   563→   563→          : isLocked
+   564→   564→   564→            ? 'text-muted-foreground/60 cursor-not-allowed'
+   565→   565→   565→            : 'hover:bg-accent'
+   566→   566→   566→      )}
+   567→   567→   567→    >
+   568→   568→   568→      {/* Status icon */}
+   569→   569→   569→      {isLocked ? (
+   570→   570→   570→        <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+   571→   571→   571→      ) : isCompleted ? (
+   572→   572→   572→        <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600" />
+   573→   573→   573→      ) : (
+   574→   574→   574→        <Circle className="w-4 h-4 flex-shrink-0 text-muted-foreground/40" />
+   575→   575→   575→      )}
+   576→   576→   576→
+   577→   577→   577→      <LessonTypeIcon type={lesson.type} className={cn('w-3.5 h-3.5 flex-shrink-0', active && 'text-primary')} />
+   578→   578→   578→
+   579→   579→   579→      <span className="flex-1 truncate text-xs">{lesson.title}</span>
+   580→   580→   580→      <span className="text-[10px] text-muted-foreground flex-shrink-0">
+   581→   581→   581→        {formatDuration(lesson.durationMin, t)}
+   582→   582→   582→      </span>
+   583→   583→   583→    </button>
+   584→   584→   584→  )
+   585→   585→   585→}
+   586→   586→   586→
+   587→   587→   587→function LessonViewer({
+   588→   588→   588→  lesson,
+   589→   589→   589→  isEnrolled,
+   590→   590→   590→  courseId,
+   591→   591→   591→  onMarkComplete,
+   592→   592→   592→  onProgress,
+   593→   593→   593→}: {
+   594→   594→   594→  lesson: LessonWithLock
+   595→   595→   595→  isEnrolled: boolean
+   596→   596→   596→  courseId: string
+   597→   597→   597→  onMarkComplete: () => void
+   598→   598→   598→  onProgress: (lessonId: string, updater: (l: LessonWithLock) => LessonWithLock) => void
+   599→   599→   599→}) {
+   600→   600→   600→  const { t } = useTranslation()
+   601→   601→   601→  const { toast } = useToast()
+   602→   602→   602→  const videoRef = useRef<HTMLVideoElement>(null)
+   603→   603→   603→  const lastSaveRef = useRef<number>(0)
+   604→   604→   604→  const watchTimeRef = useRef<number>(lesson.progress?.watchTimeSec ?? 0)
+   605→   605→   605→  const isCompleted = lesson.progress?.isCompleted
+   606→   606→   606→
+   607→   607→   607→  // Throttled progress save for video
+   608→   608→   608→  const saveVideoProgress = useCallback(
+   609→   609→   609→    (currentTime: number, additionalWatchTime: number) => {
+   610→   610→   610→      const now = Date.now()
+   611→   611→   611→      if (now - lastSaveRef.current < 10000) return // throttle: 10s
+   612→   612→   612→      lastSaveRef.current = now
+   613→   613→   613→
+   614→   614→   614→      watchTimeRef.current = Math.max(watchTimeRef.current, additionalWatchTime)
+   615→   615→   615→
+   616→   616→   616→      api
+   617→   617→   617→        .post(`/courses/${courseId}/progress`, {
+   618→   618→   618→          lessonId: lesson.id,
+   619→   619→   619→          watchTimeSec: watchTimeRef.current,
+   620→   620→   620→          lastPosition: Math.floor(currentTime),
+   621→   621→   621→        })
+   622→   622→   622→        .then((r) => {
+   623→   623→   623→          // Sync course-level progress (silently)
+   624→   624→   624→          const data = (r as { data?: { courseProgress?: number } })?.data
+   625→   625→   625→          if (data?.courseProgress !== undefined) {
+   626→   626→   626→            // Could bubble up — but for simplicity just update lesson locally
+   627→   627→   627→          }
+   628→   628→   628→        })
+   629→   629→   629→        .catch(() => {})
+   630→   630→   630→    },
+   631→   631→   631→    [courseId, lesson.id]
+   632→   632→   632→  )
+   633→   633→   633→
+   634→   634→   634→  const handleVideoTimeUpdate = useCallback(
+   635→   635→   635→    (e: React.SyntheticEvent<HTMLVideoElement>) => {
+   636→   636→   636→      const v = e.currentTarget
+   637→   637→   637→      // Accumulate watch time
+   638→   638→   638→      watchTimeRef.current += 1
+   639→   639→   639→      saveVideoProgress(v.currentTime, watchTimeRef.current)
+   640→   640→   640→    },
+   641→   641→   641→    [saveVideoProgress]
+   642→   642→   642→  )
+   643→   643→   643→
+   644→   644→   644→  const handleVideoPause = useCallback(
+   645→   645→   645→    (e: React.SyntheticEvent<HTMLVideoElement>) => {
+   646→   646→   646→      const v = e.currentTarget
+   647→   647→   647→      // Force save on pause
+   648→   648→   648→      lastSaveRef.current = 0
+   649→   649→   649→      saveVideoProgress(v.currentTime, watchTimeRef.current)
+   650→   650→   650→    },
+   651→   651→   651→    [saveVideoProgress]
+   652→   652→   652→  )
+   653→   653→   653→
+   654→   654→   654→  // Restore last video position on mount
+   655→   655→   655→  useEffect(() => {
+   656→   656→   656→    if (lesson.type === 'video' && videoRef.current && lesson.progress?.lastPosition) {
+   657→   657→   657→      const t = setTimeout(() => {
+   658→   658→   658→        if (videoRef.current) {
+   659→   659→   659→          videoRef.current.currentTime = lesson.progress!.lastPosition
+   660→   660→   660→        }
+   661→   661→   661→      }, 200)
+   662→   662→   662→      return () => clearTimeout(t)
+   663→   663→   663→    }
+   664→   664→   664→  }, [lesson.id, lesson.type, lesson.progress?.lastPosition])
+   665→   665→   665→
+   666→   666→   666→  return (
+   667→   667→   667→    <Card className="overflow-hidden">
+   668→   668→   668→      <CardHeader className="border-b">
+   669→   669→   669→        <div className="flex items-start justify-between gap-3">
+   670→   670→   670→          <div className="flex-1 min-w-0">
+   671→   671→   671→            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+   672→   672→   672→              <LessonTypeIcon type={lesson.type} className="w-3.5 h-3.5" />
+   673→   673→   673→              <span className="capitalize">{t(`courses.lessonType.${lesson.type}`) || lesson.type}</span>
+   674→   674→   674→              <span>•</span>
+   675→   675→   675→              <span>{formatDuration(lesson.durationMin, t)}</span>
+   676→   676→   676→              {lesson.isFree && !isEnrolled && (
+   677→   677→   677→                <>
+   678→   678→   678→                  <span>•</span>
+   679→   679→   679→                  <Badge variant="secondary" className="text-[10px] py-0">{t('common.free')}</Badge>
+   680→   680→   680→                </>
+   681→   681→   681→              )}
+   682→   682→   682→            </div>
+   683→   683→   683→            <CardTitle className="text-lg leading-snug">{lesson.title}</CardTitle>
+   684→   684→   684→            {lesson.description && (
+   685→   685→   685→              <CardDescription className="mt-1">{lesson.description}</CardDescription>
+   686→   686→   686→            )}
+   687→   687→   687→          </div>
+   688→   688→   688→          {isCompleted && (
+   689→   689→   689→            <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">
+   690→   690→   690→              <CheckCircle2 className="w-3 h-3" /> {t('courses.completed')}
+   691→   691→   691→            </Badge>
+   692→   692→   692→          )}
+   693→   693→   693→        </div>
+   694→   694→   694→      </CardHeader>
+   695→   695→   695→
+   696→   696→   696→      <CardContent className="p-0">
+   697→   697→   697→        {/* Lesson content */}
+   698→   698→   698→        <div className="p-4 sm:p-6">
+   699→   699→   699→          {lesson.type === 'video' && lesson.videoUrl ? (
+   700→   700→   700→            <div className="space-y-3">
+   701→   701→   701→              <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
+   702→   702→   702→                <video
+   703→   703→   703→                  ref={videoRef}
+   704→   704→   704→                  src={lesson.videoUrl}
+   705→   705→   705→                  controls
+   706→   706→   706→                  className="w-full h-full"
+   707→   707→   707→                  onTimeUpdate={handleVideoTimeUpdate}
+   708→   708→   708→                  onPause={handleVideoPause}
+   709→   709→   709→                  onEnded={() => {
+   710→   710→   710→                    lastSaveRef.current = 0
+   711→   711→   711→                    saveVideoProgress(0, watchTimeRef.current)
+   712→   712→   712→                  }}
+   713→   713→   713→                  controlsList="nodownload"
+   714→   714→   714→                >
+   715→   715→   715→                  <track kind="captions" />
+   716→   716→   716→                </video>
+   717→   717→   717→              </div>
+   718→   718→   718→              {!isEnrolled && (
+   719→   719→   719→                <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+   720→   720→   720→                  <Lock className="w-3.5 h-3.5" />
+   721→   721→   721→                  {t('courses.enrollForVideo')}
+   722→   722→   722→                </div>
+   723→   723→   723→              )}
+   724→   724→   724→            </div>
+   725→   725→   725→          ) : lesson.type === 'text' && lesson.content ? (
+   726→   726→   726→            <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-bold prose-a:text-primary prose-strong:text-foreground prose-code:bg-muted prose-code:rounded prose-code:px-1 prose-code:py-0.5 prose-code:before:content-none prose-code:after:content-none">
+   727→   727→   727→              <ReactMarkdown>{lesson.content}</ReactMarkdown>
+   728→   728→   728→            </div>
+   729→   729→   729→          ) : lesson.type === 'pdf' ? (
+   730→   730→   730→            <div className="space-y-4">
+   731→   731→   731→              <div className="flex flex-col items-center justify-center py-12 px-4 text-center border-2 border-dashed border-border rounded-lg">
+   732→   732→   732→                <File className="w-16 h-16 text-muted-foreground/40 mb-3" />
+   733→   733→   733→                <h3 className="font-semibold">{t('courses.pdfDoc')}</h3>
+   734→   734→   734→                <p className="text-sm text-muted-foreground mt-1 max-w-md">
+   735→   735→   735→                  {t('courses.pdfDesc')}
+   736→   736→   736→                </p>
+   737→   737→   737→                {lesson.fileUrl ? (
+   738→   738→   738→                  <Button asChild className="mt-4">
+   739→   739→   739→                    <a href={lesson.fileUrl} download target="_blank" rel="noopener noreferrer">
+   740→   740→   740→                      <Download className="w-4 h-4" /> {t('common.download')}
+   741→   741→   741→                    </a>
+   742→   742→   742→                  </Button>
+   743→   743→   743→                ) : (
+   744→   744→   744→                  <Badge variant="secondary" className="mt-4">{t('courses.noFile')}</Badge>
+   745→   745→   745→                )}
+   746→   746→   746→              </div>
+   747→   747→   747→            </div>
+   748→   748→   748→          ) : lesson.type === 'assignment' ? (
+   749→   749→   749→            <div className="space-y-3">
+   750→   750→   750→              <div className="flex flex-col items-center justify-center py-12 px-4 text-center border-2 border-dashed border-border rounded-lg">
+   751→   751→   751→                <ClipboardList className="w-16 h-16 text-muted-foreground/40 mb-3" />
+   752→   752→   752→                <h3 className="font-semibold">{t('courses.assignment')}</h3>
+   753→   753→   753→                <p className="text-sm text-muted-foreground mt-1 max-w-md">
+   754→   754→   754→                  {t('courses.assignmentDesc')}
+   755→   755→   755→                </p>
+   756→   756→   756→              </div>
+   757→   757→   757→              {lesson.content && (
+   758→   758→   758→                <div className="prose prose-sm dark:prose-invert max-w-none">
+   759→   759→   759→                  <ReactMarkdown>{lesson.content}</ReactMarkdown>
+   760→   760→   760→                </div>
+   761→   761→   761→              )}
+   762→   762→   762→            </div>
+   763→   763→   763→          ) : (
+   764→   764→   764→            <div className="py-12 text-center text-sm text-muted-foreground">
+   765→   765→   765→              {t('courses.noContent')}
+   766→   766→   766→            </div>
+   767→   767→   767→          )}
+   768→   768→   768→        </div>
+   769→   769→   769→
+   770→   770→   770→        {/* Footer: mark complete */}
+   771→   771→   771→        {isEnrolled && (
+   772→   772→   772→          <>
+   773→   773→   773→            <Separator />
+   774→   774→   774→            <div className="p-4 flex items-center justify-between gap-3">
+   775→   775→   775→              <div className="text-xs text-muted-foreground">
+   776→   776→   776→                {isCompleted
+   777→   777→   777→                  ? t('courses.lessonAlreadyCompleted')
+   778→   778→   778→                  : t('courses.markCompletePrompt')}
+   779→   779→   779→              </div>
+   780→   780→   780→              <Button
+   781→   781→   781→                onClick={onMarkComplete}
+   782→   782→   782→                disabled={isCompleted}
+   783→   783→   783→                variant={isCompleted ? 'outline' : 'default'}
+   784→   784→   784→              >
+   785→   785→   785→                {isCompleted ? (
+   786→   786→   786→                  <>
+   787→   787→   787→                    <CheckCircle2 className="w-4 h-4" /> {t('courses.completed')}
+   788→   788→   788→                  </>
+   789→   789→   789→                ) : (
+   790→   790→   790→                  t('courses.markComplete')
+   791→   791→   791→                )}
+   792→   792→   792→              </Button>
+   793→   793→   793→            </div>
+   794→   794→   794→          </>
+   795→   795→   795→        )}
+   796→   796→   796→      </CardContent>
+   797→   797→   797→    </Card>
+   798→   798→   798→  )
+   799→   799→   799→}
+   800→   800→   800→
+   801→   801→   801→function CourseInfoPanel({ course, isEnrolled }: { course: CourseDetail; isEnrolled: boolean }) {
+   802→   802→   802→  const { t } = useTranslation()
+   803→   803→   803→  const navigate = useNav((s) => s.navigate)
+   804→   804→   804→  const { toast } = useToast()
+   805→   805→   805→
+   806→   806→   806→  const handleEnroll = async () => {
+   807→   807→   807→    try {
+   808→   808→   808→      await api.post(`/courses/${course.id}/enroll`)
+   809→   809→   809→      toast({ title: t('common.congrats'), description: t('courses.enrollSuccess') })
+   810→   810→   810→      // Reload page state via navigation re-render
+   811→   811→   811→      navigate('course-detail', { id: course.id })
+   812→   812→   812→      // Force a refresh by re-fetching
+   813→   813→   813→      window.location.reload()
+   814→   814→   814→    } catch (e) {
+   815→   815→   815→      toast({
+   816→   816→   816→        title: t('common.error'),
+   817→   817→   817→        description: e instanceof Error ? e.message : t('courses.enrollError'),
+   818→   818→   818→        variant: 'destructive',
+   819→   819→   819→      })
+   820→   820→   820→    }
+   821→   821→   821→  }
+   822→   822→   822→
+   823→   823→   823→  const learnPoints = [
+   824→   824→   824→    t('courses.learnPoint1'),
+   825→   825→   825→    t('courses.learnPoint2'),
+   826→   826→   826→    t('courses.learnPoint3'),
+   827→   827→   827→    t('courses.learnPoint4'),
+   828→   828→   828→  ]
+   829→   829→   829→
+   830→   830→   830→  return (
+   831→   831→   831→    <Card className="mt-6">
+   832→   832→   832→      <CardHeader>
+   833→   833→   833→        <CardTitle className="text-lg">{t('courses.about')}</CardTitle>
+   834→   834→   834→      </CardHeader>
+   835→   835→   835→      <CardContent className="space-y-6">
+   836→   836→   836→        {/* Description */}
+   837→   837→   837→        <div>
+   838→   838→   838→          <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+   839→   839→   839→            <FileText className="w-4 h-4 text-primary" /> {t('courses.description')}
+   840→   840→   840→          </h4>
+   841→   841→   841→          <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
+   842→   842→   842→            {course.description ?? t('courses.noDescription')}
+   843→   843→   843→          </p>
+   844→   844→   844→        </div>
+   845→   845→   845→
+   846→   846→   846→        <Separator />
+   847→   847→   847→
+   848→   848→   848→        {/* What you'll learn */}
+   849→   849→   849→        <div>
+   850→   850→   850→          <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+   851→   851→   851→            <Award className="w-4 h-4 text-primary" /> {t('courses.whatYouWillLearn')}
+   852→   852→   852→          </h4>
+   853→   853→   853→          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+   854→   854→   854→            {learnPoints.map((item, i) => (
+   855→   855→   855→              <li key={i} className="flex items-start gap-2">
+   856→   856→   856→                <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+   857→   857→   857→                <span className="text-muted-foreground">{item}</span>
+   858→   858→   858→              </li>
+   859→   859→   859→            ))}
+   860→   860→   860→          </ul>
+   861→   861→   861→        </div>
+   862→   862→   862→
+   863→   863→   863→        <Separator />
+   864→   864→   864→
+   865→   865→   865→        {/* Tutor info */}
+   866→   866→   866→        {course.tutor && (
+   867→   867→   867→          <div>
+   868→   868→   868→            <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+   869→   869→   869→              <User className="w-4 h-4 text-primary" /> {t('courses.tutor')}
+   870→   870→   870→            </h4>
+   871→   871→   871→            <div className="flex items-start gap-3">
+   872→   872→   872→              <Avatar className="w-12 h-12">
+   873→   873→   873→                <AvatarFallback className="bg-primary/10 text-primary">
+   874→   874→   874→                  {course.tutor.firstName[0]}{course.tutor.lastName[0]}
+   875→   875→   875→                </AvatarFallback>
+   876→   876→   876→              </Avatar>
+   877→   877→   877→              <div className="flex-1 min-w-0">
+   878→   878→   878→                <div className="font-medium">
+   879→   879→   879→                  {course.tutor.firstName} {course.tutor.lastName}
+   880→   880→   880→                  {course.tutor.middleName ? ' ' + course.tutor.middleName : ''}
+   881→   881→   881→                </div>
+   882→   882→   882→                {course.tutor.position && (
+   883→   883→   883→                  <div className="text-sm text-muted-foreground">{course.tutor.position}</div>
+   884→   884→   884→                )}
+   885→   885→   885→                {course.tutor.department && (
+   886→   886→   886→                  <div className="text-xs text-muted-foreground mt-0.5">{course.tutor.department}</div>
+   887→   887→   887→                )}
+   888→   888→   888→              </div>
+   889→   889→   889→            </div>
+   890→   890→   890→          </div>
+   891→   891→   891→        )}
+   892→   892→   892→
+   893→   893→   893→        <Separator />
+   894→   894→   894→
+   895→   895→   895→        {/* Course stats */}
+   896→   896→   896→        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+   897→   897→   897→          <div className="space-y-1">
+   898→   898→   898→            <div className="text-xs text-muted-foreground">{t('courses.levelLabel')}</div>
+   899→   899→   899→            <div className="font-medium">{levelLabel(course.level, t)}</div>
+   900→   900→   900→          </div>
+   901→   901→   901→          <div className="space-y-1">
+   902→   902→   902→            <div className="text-xs text-muted-foreground">{t('courses.duration')}</div>
+   903→   903→   903→            <div className="font-medium">{course.durationHours} {t('common.hours')}</div>
+   904→   904→   904→          </div>
+   905→   905→   905→          <div className="space-y-1">
+   906→   906→   906→            <div className="text-xs text-muted-foreground">{t('courses.lessonsCount')}</div>
+   907→   907→   907→            <div className="font-medium">{course._count?.lessons ?? 0}</div>
+   908→   908→   908→          </div>
+   909→   909→   909→          <div className="space-y-1">
+   910→   910→   910→            <div className="text-xs text-muted-foreground">{t('courses.enrolledCount')}</div>
+   911→   911→   911→            <div className="font-medium">{course._count?.enrollments ?? 0}</div>
+   912→   912→   912→          </div>
+   913→   913→   913→        </div>
+   914→   914→   914→
+   915→   915→   915→        {/* CTA for non-enrolled students */}
+   916→   916→   916→        {!isEnrolled && (
+   917→   917→   917→          <>
+   918→   918→   918→            <Separator />
+   919→   919→   919→            <div className="rounded-lg bg-primary/5 border border-primary/20 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+   920→   920→   920→              <div>
+   921→   921→   921→                <div className="font-semibold">{t('courses.startToday')}</div>
+   922→   922→   922→                <div className="text-sm text-muted-foreground">
+   923→   923→   923→                  {t('courses.enrollTodayDesc')}
+   924→   924→   924→                </div>
+   925→   925→   925→              </div>
+   926→   926→   926→              <Button onClick={handleEnroll}>
+   927→   927→   927→                <GraduationCap className="w-4 h-4" /> {t('courses.enroll')}
+   928→   928→   928→              </Button>
+   929→   929→   929→            </div>
+   930→   930→   930→          </>
+   931→   931→   931→        )}
+   932→   932→   932→      </CardContent>
+   933→   933→   933→    </Card>
+   934→   934→   934→  )
+   935→   935→   935→}
+   936→   936→   936→

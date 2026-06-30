@@ -1,0 +1,806 @@
+    50→    50→    50→  ChevronRight,
+    51→    51→    51→} from 'lucide-react'
+    52→    52→    52→import { useToast } from '@/hooks/use-toast'
+    53→    53→    53→import { useTranslation } from '@/lib/i18n'
+    54→    54→    54→
+    55→    55→    55→interface CertificatesResponse {
+    56→    56→    56→  status: string
+    57→    57→    57→  data: Certificate[]
+    58→    58→    58→  meta?: { total: number; page: number; pages: number; limit: number }
+    59→    59→    59→}
+    60→    60→    60→
+    61→    61→    61→interface AutoGenResponse {
+    62→    62→    62→  status: string
+    63→    63→    63→  data: {
+    64→    64→    64→    created: number
+    65→    65→    65→    certificates: Array<{ certNumber: string; studentName: string; courseTitle: string }>
+    66→    66→    66→    message: string
+    67→    67→    67→  }
+    68→    68→    68→}
+    69→    69→    69→
+    70→    70→    70→const PAGE_SIZE = 12
+    71→    71→    71→
+    72→    72→    72→export function CertificatesView() {
+    73→    73→    73→  const user = useAuth((s) => s.user)!
+    74→    74→    74→  const navigate = useNav((s) => s.navigate)
+    75→    75→    75→  const { toast } = useToast()
+    76→    76→    76→  const { t } = useTranslation()
+    77→    77→    77→
+    78→    78→    78→  const isStaff = user.role === 'tutor' || user.role === 'admin'
+    79→    79→    79→
+    80→    80→    80→  const [certificates, setCertificates] = useState<Certificate[]>([])
+    81→    81→    81→  const [loading, setLoading] = useState(true)
+    82→    82→    82→  const [page, setPage] = useState(1)
+    83→    83→    83→  const [meta, setMeta] = useState<{ total: number; pages: number }>({ total: 0, pages: 1 })
+    84→    84→    84→
+    85→    85→    85→  const [search, setSearch] = useState('')
+    86→    86→    86→  const [debouncedSearch, setDebouncedSearch] = useState('')
+    87→    87→    87→  const [courseId, setCourseId] = useState<string>('all')
+    88→    88→    88→  const [status, setStatus] = useState<string>('all')
+    89→    89→    89→  const [courses, setCourses] = useState<Array<{ id: string; title: string }>>([])
+    90→    90→    90→
+    91→    91→    91→  const [autoGenerating, setAutoGenerating] = useState(false)
+    92→    92→    92→  const [revokingId, setRevokingId] = useState<string | null>(null)
+    93→    93→    93→  const [revokeDialog, setRevokeDialog] = useState<{ open: boolean; cert: Certificate | null }>({
+    94→    94→    94→    open: false,
+    95→    95→    95→    cert: null,
+    96→    96→    96→  })
+    97→    97→    97→
+    98→    98→    98→  // Debounce search input
+    99→    99→    99→  useEffect(() => {
+   100→   100→   100→    const t = setTimeout(() => {
+   101→   101→   101→      setDebouncedSearch(search)
+   102→   102→   102→      setPage(1)
+   103→   103→   103→    }, 350)
+   104→   104→   104→    return () => clearTimeout(t)
+   105→   105→   105→  }, [search])
+   106→   106→   106→
+   107→   107→   107→  // Build query string
+   108→   108→   108→  const queryString = useMemo(() => {
+   109→   109→   109→    const p = new URLSearchParams()
+   110→   110→   110→    p.set('page', String(page))
+   111→   111→   111→    p.set('limit', String(PAGE_SIZE))
+   112→   112→   112→    if (isStaff && debouncedSearch) p.set('search', debouncedSearch)
+   113→   113→   113→    if (isStaff && courseId !== 'all') p.set('courseId', courseId)
+   114→   114→   114→    if (isStaff && status !== 'all') p.set('status', status)
+   115→   115→   115→    return p.toString()
+   116→   116→   116→  }, [page, isStaff, debouncedSearch, courseId, status])
+   117→   117→   117→
+   118→   118→   118→  // Fetch certificates
+   119→   119→   119→  useEffect(() => {
+   120→   120→   120→    let cancelled = false
+   121→   121→   121→    Promise.resolve().then(() => {
+   122→   122→   122→      if (!cancelled) setLoading(true)
+   123→   123→   123→    })
+   124→   124→   124→    api
+   125→   125→   125→      .get<CertificatesResponse>(`/certificates?${queryString}`)
+   126→   126→   126→      .then((r) => {
+   127→   127→   127→        if (cancelled) return
+   128→   128→   128→        setCertificates(r.data ?? [])
+   129→   129→   129→        if (r.meta) setMeta({ total: r.meta.total, pages: r.meta.pages })
+   130→   130→   130→      })
+   131→   131→   131→      .catch((e) => {
+   132→   132→   132→        if (cancelled) return
+   133→   133→   133→        toast({
+   134→   134→   134→          title: t('common.error'),
+   135→   135→   135→          description: (e as Error).message || t('certificates.loadFailed'),
+   136→   136→   136→          variant: 'destructive',
+   137→   137→   137→        })
+   138→   138→   138→        setCertificates([])
+   139→   139→   139→      })
+   140→   140→   140→      .finally(() => {
+   141→   141→   141→        if (!cancelled) setLoading(false)
+   142→   142→   142→      })
+   143→   143→   143→    return () => {
+   144→   144→   144→      cancelled = true
+   145→   145→   145→    }
+   146→   146→   146→  }, [queryString])
+   147→   147→   147→
+   148→   148→   148→  // Fetch course list for filter (staff only, once)
+   149→   149→   149→  useEffect(() => {
+   150→   150→   150→    if (!isStaff) return
+   151→   151→   151→    let cancelled = false
+   152→   152→   152→    api
+   153→   153→   153→      .get<{ status: string; data: Array<{ id: string; title: string }> }>(
+   154→   154→   154→        '/courses?limit=60&sort=title'
+   155→   155→   155→      )
+   156→   156→   156→      .then((r) => {
+   157→   157→   157→        if (cancelled) return
+   158→   158→   158→        setCourses(r.data ?? [])
+   159→   159→   159→      })
+   160→   160→   160→      .catch(() => {
+   161→   161→   161→        if (!cancelled) setCourses([])
+   162→   162→   162→      })
+   163→   163→   163→    return () => {
+   164→   164→   164→      cancelled = true
+   165→   165→   165→    }
+   166→   166→   166→  }, [isStaff])
+   167→   167→   167→
+   168→   168→   168→  const clearFilters = () => {
+   169→   169→   169→    setSearch('')
+   170→   170→   170→    setCourseId('all')
+   171→   171→   171→    setStatus('all')
+   172→   172→   172→    setPage(1)
+   173→   173→   173→  }
+   174→   174→   174→
+   175→   175→   175→  const hasActiveFilters =
+   176→   176→   176→    !!debouncedSearch || courseId !== 'all' || status !== 'all'
+   177→   177→   177→
+   178→   178→   178→  const handleAutoGenerate = useCallback(async () => {
+   179→   179→   179→    setAutoGenerating(true)
+   180→   180→   180→    try {
+   181→   181→   181→      const res = await api.post<AutoGenResponse>('/certificates/auto')
+   182→   182→   182→      toast({
+   183→   183→   183→        title: res.data.created > 0 ? t('certificates.certsCreated') : t('certificates.noNewCerts'),
+   184→   184→   184→        description: res.data.message,
+   185→   185→   185→        variant: res.data.created > 0 ? 'default' : 'default',
+   186→   186→   186→      })
+   187→   187→   187→      // Refresh list
+   188→   188→   188→      if (res.data.created > 0) {
+   189→   189→   189→        setPage(1)
+   190→   190→   190→        // Re-fetch by toggling queryString via state change
+   191→   191→   191→        setTimeout(() => {
+   192→   192→   192→          api
+   193→   193→   193→            .get<CertificatesResponse>(`/certificates?${queryString}`)
+   194→   194→   194→            .then((r) => {
+   195→   195→   195→              setCertificates(r.data ?? [])
+   196→   196→   196→              if (r.meta) setMeta({ total: r.meta.total, pages: r.meta.pages })
+   197→   197→   197→            })
+   198→   198→   198→            .catch(() => {})
+   199→   199→   199→        }, 200)
+   200→   200→   200→      }
+   201→   201→   201→    } catch (e) {
+   202→   202→   202→      toast({
+   203→   203→   203→        title: t('common.error'),
+   204→   204→   204→        description: e instanceof Error ? e.message : t('certificates.autoFailed'),
+   205→   205→   205→        variant: 'destructive',
+   206→   206→   206→      })
+   207→   207→   207→    } finally {
+   208→   208→   208→      setAutoGenerating(false)
+   209→   209→   209→    }
+   210→   210→   210→  }, [queryString])
+   211→   211→   211→
+   212→   212→   212→  const handleRevoke = useCallback(async () => {
+   213→   213→   213→    const cert = revokeDialog.cert
+   214→   214→   214→    if (!cert) return
+   215→   215→   215→    setRevokingId(cert.id)
+   216→   216→   216→    try {
+   217→   217→   217→      await api.patch(`/certificates/${cert.id}`, { status: 'revoked' })
+   218→   218→   218→      // Update local state
+   219→   219→   219→      setCertificates((prev) =>
+   220→   220→   220→        prev.map((c) => (c.id === cert.id ? { ...c, status: 'revoked' } : c))
+   221→   221→   221→      )
+   222→   222→   222→      toast({
+   223→   223→   223→        title: t('certificates.revokedToast'),
+   224→   224→   224→        description: t('certificates.revokedToastDesc').replace('{certNumber}', cert.certNumber),
+   225→   225→   225→      })
+   226→   226→   226→    } catch (e) {
+   227→   227→   227→      toast({
+   228→   228→   228→        title: t('common.error'),
+   229→   229→   229→        description: e instanceof Error ? e.message : t('common.actionFailed'),
+   230→   230→   230→        variant: 'destructive',
+   231→   231→   231→      })
+   232→   232→   232→    } finally {
+   233→   233→   233→      setRevokingId(null)
+   234→   234→   234→      setRevokeDialog({ open: false, cert: null })
+   235→   235→   235→    }
+   236→   236→   236→  }, [revokeDialog.cert])
+   237→   237→   237→
+   238→   238→   238→  const handleDownload = useCallback(
+   239→   239→   239→    (e: React.MouseEvent, cert: Certificate) => {
+   240→   240→   240→      e.stopPropagation()
+   241→   241→   241→      // Navigate to verify view and trigger print
+   242→   242→   242→      navigate('certificate-verify', { hash: cert.verifyHash, print: '1' })
+   243→   243→   243→    },
+   244→   244→   244→    [navigate]
+   245→   245→   245→  )
+   246→   246→   246→
+   247→   247→   247→  if (isStaff) {
+   248→   248→   248→    return (
+   249→   249→   249→      <StaffCertificatesView
+   250→   250→   250→        certificates={certificates}
+   251→   251→   251→        loading={loading}
+   252→   252→   252→        page={page}
+   253→   253→   253→        meta={meta}
+   254→   254→   254→        search={search}
+   255→   255→   255→        courseId={courseId}
+   256→   256→   256→        status={status}
+   257→   257→   257→        courses={courses}
+   258→   258→   258→        autoGenerating={autoGenerating}
+   259→   259→   259→        revokingId={revokingId}
+   260→   260→   260→        hasActiveFilters={hasActiveFilters}
+   261→   261→   261→        onSearchChange={setSearch}
+   262→   262→   262→        onCourseChange={(v) => {
+   263→   263→   263→          setCourseId(v)
+   264→   264→   264→          setPage(1)
+   265→   265→   265→        }}
+   266→   266→   266→        onStatusChange={(v) => {
+   267→   267→   267→          setStatus(v)
+   268→   268→   268→          setPage(1)
+   269→   269→   269→        }}
+   270→   270→   270→        onClearFilters={clearFilters}
+   271→   271→   271→        onPageChange={setPage}
+   272→   272→   272→        onAutoGenerate={handleAutoGenerate}
+   273→   273→   273→        onView={(c) => navigate('certificate-verify', { hash: c.verifyHash })}
+   274→   274→   274→        onDownload={(e, c) => handleDownload(e, c)}
+   275→   275→   275→        onRevoke={(c) => setRevokeDialog({ open: true, cert: c })}
+   276→   276→   276→        revokeDialog={revokeDialog}
+   277→   277→   277→        onRevokeClose={() => setRevokeDialog({ open: false, cert: null })}
+   278→   278→   278→        onRevokeConfirm={handleRevoke}
+   279→   279→   279→      />
+   280→   280→   280→    )
+   281→   281→   281→  }
+   282→   282→   282→
+   283→   283→   283→  return (
+   284→   284→   284→    <StudentCertificatesView
+   285→   285→   285→      certificates={certificates}
+   286→   286→   286→      loading={loading}
+   287→   287→   287→      page={page}
+   288→   288→   288→      meta={meta}
+   289→   289→   289→      onView={(c) => navigate('certificate-verify', { hash: c.verifyHash })}
+   290→   290→   290→      onDownload={(e, c) => handleDownload(e, c)}
+   291→   291→   291→      onPageChange={setPage}
+   292→   292→   292→    />
+   293→   293→   293→  )
+   294→   294→   294→}
+   295→   295→   295→
+   296→   296→   296→// ============== STUDENT VIEW ==============
+   297→   297→   297→
+   298→   298→   298→function StudentCertificatesView({
+   299→   299→   299→  certificates,
+   300→   300→   300→  loading,
+   301→   301→   301→  page,
+   302→   302→   302→  meta,
+   303→   303→   303→  onView,
+   304→   304→   304→  onDownload,
+   305→   305→   305→  onPageChange,
+   306→   306→   306→}: {
+   307→   307→   307→  certificates: Certificate[]
+   308→   308→   308→  loading: boolean
+   309→   309→   309→  page: number
+   310→   310→   310→  meta: { total: number; pages: number }
+   311→   311→   311→  onView: (cert: Certificate) => void
+   312→   312→   312→  onDownload: (e: React.MouseEvent, cert: Certificate) => void
+   313→   313→   313→  onPageChange: (page: number) => void
+   314→   314→   314→}) {
+   315→   315→   315→  const { t } = useTranslation()
+   316→   316→   316→  return (
+   317→   317→   317→    <div className="space-y-6">
+   318→   318→   318→      {/* Header */}
+   319→   319→   319→      <div>
+   320→   320→   320→        <h1 className="text-2xl font-bold flex items-center gap-2">
+   321→   321→   321→          <Award className="w-6 h-6 text-primary" />
+   322→   322→   322→          {t('certificates.myCerts')}
+   323→   323→   323→        </h1>
+   324→   324→   324→        <p className="text-muted-foreground text-sm mt-0.5">
+   325→   325→   325→          {t('certificates.myCertsDesc')}
+   326→   326→   326→        </p>
+   327→   327→   327→      </div>
+   328→   328→   328→
+   329→   329→   329→      {loading ? (
+   330→   330→   330→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   331→   331→   331→          {Array.from({ length: 6 }).map((_, i) => (
+   332→   332→   332→            <Card key={i} className="overflow-hidden pt-0 gap-0">
+   333→   333→   333→              <Skeleton className="h-32 w-full rounded-none" />
+   334→   334→   334→              <CardContent className="p-4 space-y-3">
+   335→   335→   335→                <Skeleton className="h-4 w-2/3" />
+   336→   336→   336→                <Skeleton className="h-3 w-full" />
+   337→   337→   337→                <Skeleton className="h-8 w-full" />
+   338→   338→   338→              </CardContent>
+   339→   339→   339→            </Card>
+   340→   340→   340→          ))}
+   341→   341→   341→        </div>
+   342→   342→   342→      ) : certificates.length === 0 ? (
+   343→   343→   343→        <Card className="p-12">
+   344→   344→   344→          <div className="flex flex-col items-center text-center gap-4">
+   345→   345→   345→            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+   346→   346→   346→              <Award className="w-10 h-10 text-primary/60" />
+   347→   347→   347→            </div>
+   348→   348→   348→            <div>
+   349→   349→   349→              <h3 className="font-semibold text-lg">{t('certificates.noCertsTitle')}</h3>
+   350→   350→   350→              <p className="text-sm text-muted-foreground mt-1 max-w-md">
+   351→   351→   351→                {t('certificates.noCertsDesc')}
+   352→   352→   352→              </p>
+   353→   353→   353→            </div>
+   354→   354→   354→            <Button variant="outline" onClick={() => useNav.getState().navigate('quizzes')}>
+   355→   355→   355→              {t('certificates.goToTests')}
+   356→   356→   356→            </Button>
+   357→   357→   357→          </div>
+   358→   358→   358→        </Card>
+   359→   359→   359→      ) : (
+   360→   360→   360→        <>
+   361→   361→   361→          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   362→   362→   362→            {certificates.map((cert) => (
+   363→   363→   363→              <StudentCertCard
+   364→   364→   364→                key={cert.id}
+   365→   365→   365→                cert={cert}
+   366→   366→   366→                onView={() => onView(cert)}
+   367→   367→   367→                onDownload={(e) => onDownload(e, cert)}
+   368→   368→   368→              />
+   369→   369→   369→            ))}
+   370→   370→   370→          </div>
+   371→   371→   371→
+   372→   372→   372→          {!loading && meta.pages > 1 && (
+   373→   373→   373→            <Pagination page={page} pages={meta.pages} onPageChange={onPageChange} />
+   374→   374→   374→          )}
+   375→   375→   375→        </>
+   376→   376→   376→      )}
+   377→   377→   377→    </div>
+   378→   378→   378→  )
+   379→   379→   379→}
+   380→   380→   380→
+   381→   381→   381→function StudentCertCard({
+   382→   382→   382→  cert,
+   383→   383→   383→  onView,
+   384→   384→   384→  onDownload,
+   385→   385→   385→}: {
+   386→   386→   386→  cert: Certificate
+   387→   387→   387→  onView: () => void
+   388→   388→   388→  onDownload: (e: React.MouseEvent) => void
+   389→   389→   389→}) {
+   390→   390→   390→  const { t } = useTranslation()
+   391→   391→   391→  const primary = cert.template?.primaryColor ?? '#0f766e'
+   392→   392→   392→  const accent = cert.template?.accentColor ?? '#ca8a04'
+   393→   393→   393→  const studentName = useAuth((s) => s.user)
+   394→   394→   394→  const fullName = studentName
+   395→   395→   395→    ? `${studentName.lastName} ${studentName.firstName}`.trim()
+   396→   396→   396→    : ''
+   397→   397→   397→
+   398→   398→   398→  return (
+   399→   399→   399→    <Card
+   400→   400→   400→      className="overflow-hidden cursor-pointer hover:shadow-md transition-all hover:-translate-y-0.5 pt-0 gap-0 group"
+   401→   401→   401→      onClick={onView}
+   402→   402→   402→    >
+   403→   403→   403→      {/* Mini certificate preview header */}
+   404→   404→   404→      <div
+   405→   405→   405→        className="relative h-36 px-4 py-4 flex flex-col justify-between text-white"
+   406→   406→   406→        style={{
+   407→   407→   407→          background: `linear-gradient(135deg, ${primary} 0%, ${primary}dd 50%, ${primary}aa 100%)`,
+   408→   408→   408→        }}
+   409→   409→   409→      >
+   410→   410→   410→        {/* Decorative corner */}
+   411→   411→   411→        <div
+   412→   412→   412→          className="absolute top-0 right-0 w-24 h-24 opacity-20"
+   413→   413→   413→          style={{
+   414→   414→   414→            background: `radial-gradient(circle at top right, ${accent}, transparent 70%)`,
+   415→   415→   415→          }}
+   416→   416→   416→        />
+   417→   417→   417→        <div className="flex items-start justify-between relative">
+   418→   418→   418→          <div>
+   419→   419→   419→            <p className="text-[10px] uppercase tracking-widest opacity-80">{t('certificates.appName')}</p>
+   420→   420→   420→            <p className="text-xs font-medium opacity-90 mt-0.5">
+   421→   421→   421→              {cert.template?.titleText ?? t('certificates.certificate')}
+   422→   422→   422→            </p>
+   423→   423→   423→          </div>
+   424→   424→   424→          <Award className="w-7 h-7 opacity-80" style={{ color: accent }} />
+   425→   425→   425→        </div>
+   426→   426→   426→        <div className="relative">
+   427→   427→   427→          <p className="text-[11px] opacity-75 line-clamp-1">{fullName}</p>
+   428→   428→   428→          <p className="text-xs font-semibold line-clamp-1 leading-tight mt-0.5">
+   429→   429→   429→            {cert.course?.title ?? '—'}
+   430→   430→   430→          </p>
+   431→   431→   431→        </div>
+   432→   432→   432→        {/* Bottom border accent */}
+   433→   433→   433→        <div
+   434→   434→   434→          className="absolute bottom-0 left-0 right-0 h-1"
+   435→   435→   435→          style={{ background: accent }}
+   436→   436→   436→        />
+   437→   437→   437→      </div>
+   438→   438→   438→
+   439→   439→   439→      <CardContent className="p-4 space-y-3">
+   440→   440→   440→        <div className="flex items-center justify-between gap-2">
+   441→   441→   441→          <Badge
+   442→   442→   442→            variant="secondary"
+   443→   443→   443→            className="font-mono text-[10px] px-2 py-0.5"
+   444→   444→   444→          >
+   445→   445→   445→            <Hash className="w-3 h-3 mr-1" />
+   446→   446→   446→            {cert.certNumber}
+   447→   447→   447→          </Badge>
+   448→   448→   448→          <Badge
+   449→   449→   449→            className="text-[11px]"
+   450→   450→   450→            style={{
+   451→   451→   451→              background: `${primary}15`,
+   452→   452→   452→              color: primary,
+   453→   453→   453→              border: `1px solid ${primary}30`,
+   454→   454→   454→            }}
+   455→   455→   455→          >
+   456→   456→   456→            <TrendingUp className="w-3 h-3 mr-1" />
+   457→   457→   457→            {cert.percentage}%
+   458→   458→   458→          </Badge>
+   459→   459→   459→        </div>
+   460→   460→   460→
+   461→   461→   461→        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   462→   462→   462→          <Calendar className="w-3.5 h-3.5" />
+   463→   463→   463→          <span>{formatDate(cert.issuedAt)}</span>
+   464→   464→   464→          <span className="mx-1">·</span>
+   465→   465→   465→          <span>
+   466→   466→   466→            {cert.score} / {cert.maxScore} {t('certificates.ball')}
+   467→   467→   467→          </span>
+   468→   468→   468→        </div>
+   469→   469→   469→      </CardContent>
+   470→   470→   470→
+   471→   471→   471→      <CardFooter className="p-4 pt-0 gap-2">
+   472→   472→   472→        <Button size="sm" variant="outline" className="flex-1" onClick={onView}>
+   473→   473→   473→          <Eye className="w-3.5 h-3.5" /> {t('common.view')}
+   474→   474→   474→        </Button>
+   475→   475→   475→        <Button size="sm" variant="ghost" onClick={onDownload} title={t('common.download')}>
+   476→   476→   476→          <Download className="w-3.5 h-3.5" />
+   477→   477→   477→        </Button>
+   478→   478→   478→      </CardFooter>
+   479→   479→   479→    </Card>
+   480→   480→   480→  )
+   481→   481→   481→}
+   482→   482→   482→
+   483→   483→   483→// ============== STAFF VIEW ==============
+   484→   484→   484→
+   485→   485→   485→function StaffCertificatesView({
+   486→   486→   486→  certificates,
+   487→   487→   487→  loading,
+   488→   488→   488→  page,
+   489→   489→   489→  meta,
+   490→   490→   490→  search,
+   491→   491→   491→  courseId,
+   492→   492→   492→  status,
+   493→   493→   493→  courses,
+   494→   494→   494→  autoGenerating,
+   495→   495→   495→  revokingId,
+   496→   496→   496→  hasActiveFilters,
+   497→   497→   497→  onSearchChange,
+   498→   498→   498→  onCourseChange,
+   499→   499→   499→  onStatusChange,
+   500→   500→   500→  onClearFilters,
+   501→   501→   501→  onPageChange,
+   502→   502→   502→  onAutoGenerate,
+   503→   503→   503→  onView,
+   504→   504→   504→  onDownload,
+   505→   505→   505→  onRevoke,
+   506→   506→   506→  revokeDialog,
+   507→   507→   507→  onRevokeClose,
+   508→   508→   508→  onRevokeConfirm,
+   509→   509→   509→}: {
+   510→   510→   510→  certificates: Certificate[]
+   511→   511→   511→  loading: boolean
+   512→   512→   512→  page: number
+   513→   513→   513→  meta: { total: number; pages: number }
+   514→   514→   514→  search: string
+   515→   515→   515→  courseId: string
+   516→   516→   516→  status: string
+   517→   517→   517→  courses: Array<{ id: string; title: string }>
+   518→   518→   518→  autoGenerating: boolean
+   519→   519→   519→  revokingId: string | null
+   520→   520→   520→  hasActiveFilters: boolean
+   521→   521→   521→  onSearchChange: (v: string) => void
+   522→   522→   522→  onCourseChange: (v: string) => void
+   523→   523→   523→  onStatusChange: (v: string) => void
+   524→   524→   524→  onClearFilters: () => void
+   525→   525→   525→  onPageChange: (page: number) => void
+   526→   526→   526→  onAutoGenerate: () => void
+   527→   527→   527→  onView: (cert: Certificate) => void
+   528→   528→   528→  onDownload: (e: React.MouseEvent, cert: Certificate) => void
+   529→   529→   529→  onRevoke: (cert: Certificate) => void
+   530→   530→   530→  revokeDialog: { open: boolean; cert: Certificate | null }
+   531→   531→   531→  onRevokeClose: () => void
+   532→   532→   532→  onRevokeConfirm: () => void
+   533→   533→   533→}) {
+   534→   534→   534→  const { t } = useTranslation()
+   535→   535→   535→  return (
+   536→   536→   536→    <div className="space-y-6">
+   537→   537→   537→      {/* Header */}
+   538→   538→   538→      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+   539→   539→   539→        <div>
+   540→   540→   540→          <h1 className="text-2xl font-bold flex items-center gap-2">
+   541→   541→   541→            <Award className="w-6 h-6 text-primary" />
+   542→   542→   542→            {t('certificates.registry')}
+   543→   543→   543→          </h1>
+   544→   544→   544→          <p className="text-muted-foreground text-sm mt-0.5">
+   545→   545→   545→            {t('certificates.registryDesc')}
+   546→   546→   546→          </p>
+   547→   547→   547→        </div>
+   548→   548→   548→        <Button onClick={onAutoGenerate} disabled={autoGenerating}>
+   549→   549→   549→          {autoGenerating ? (
+   550→   550→   550→            <Loader2 className="w-4 h-4 animate-spin" />
+   551→   551→   551→          ) : (
+   552→   552→   552→            <Sparkles className="w-4 h-4" />
+   553→   553→   553→          )}
+   554→   554→   554→          {t('certificates.autoGenerate')}
+   555→   555→   555→        </Button>
+   556→   556→   556→      </div>
+   557→   557→   557→
+   558→   558→   558→      {/* Filters */}
+   559→   559→   559→      <Card className="p-4">
+   560→   560→   560→        <div className="flex flex-col lg:flex-row gap-3">
+   561→   561→   561→          <div className="relative flex-1">
+   562→   562→   562→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   563→   563→   563→            <Input
+   564→   564→   564→              type="search"
+   565→   565→   565→              placeholder={t('certificates.searchPlaceholder')}
+   566→   566→   566→              value={search}
+   567→   567→   567→              onChange={(e) => onSearchChange(e.target.value)}
+   568→   568→   568→              className="pl-10"
+   569→   569→   569→            />
+   570→   570→   570→            {search && (
+   571→   571→   571→              <button
+   572→   572→   572→                onClick={() => onSearchChange('')}
+   573→   573→   573→                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-accent"
+   574→   574→   574→                aria-label={t('common.clearSearch')}
+   575→   575→   575→              >
+   576→   576→   576→                <X className="w-4 h-4" />
+   577→   577→   577→              </button>
+   578→   578→   578→            )}
+   579→   579→   579→          </div>
+   580→   580→   580→          <div className="flex flex-wrap gap-2">
+   581→   581→   581→            <Select value={courseId} onValueChange={onCourseChange}>
+   582→   582→   582→              <SelectTrigger className="w-[200px]">
+   583→   583→   583→                <SelectValue placeholder={t('certificates.course')} />
+   584→   584→   584→              </SelectTrigger>
+   585→   585→   585→              <SelectContent>
+   586→   586→   586→                <SelectItem value="all">{t('certificates.allCourses')}</SelectItem>
+   587→   587→   587→                {courses.map((c) => (
+   588→   588→   588→                  <SelectItem key={c.id} value={c.id}>
+   589→   589→   589→                    {c.title}
+   590→   590→   590→                  </SelectItem>
+   591→   591→   591→                ))}
+   592→   592→   592→              </SelectContent>
+   593→   593→   593→            </Select>
+   594→   594→   594→            <Select value={status} onValueChange={onStatusChange}>
+   595→   595→   595→              <SelectTrigger className="w-[150px]">
+   596→   596→   596→                <SelectValue placeholder={t('common.status')} />
+   597→   597→   597→              </SelectTrigger>
+   598→   598→   598→              <SelectContent>
+   599→   599→   599→                <SelectItem value="all">{t('common.allStatuses')}</SelectItem>
+   600→   600→   600→                <SelectItem value="active">{t('common.active')}</SelectItem>
+   601→   601→   601→                <SelectItem value="revoked">{t('common.revoked')}</SelectItem>
+   602→   602→   602→              </SelectContent>
+   603→   603→   603→            </Select>
+   604→   604→   604→            {hasActiveFilters && (
+   605→   605→   605→              <Button variant="ghost" onClick={onClearFilters} size="sm">
+   606→   606→   606→                <X className="w-4 h-4" /> {t('common.clear')}
+   607→   607→   607→              </Button>
+   608→   608→   608→            )}
+   609→   609→   609→          </div>
+   610→   610→   610→        </div>
+   611→   611→   611→        <div className="mt-3 text-xs text-muted-foreground">
+   612→   612→   612→          {loading
+   613→   613→   613→            ? t('common.loading')
+   614→   614→   614→            : t('certificates.resultsFound').replace('{total}', String(meta.total))}
+   615→   615→   615→        </div>
+   616→   616→   616→      </Card>
+   617→   617→   617→
+   618→   618→   618→      {/* Table */}
+   619→   619→   619→      {loading ? (
+   620→   620→   620→        <Card className="p-6">
+   621→   621→   621→          <div className="space-y-3">
+   622→   622→   622→            {Array.from({ length: 6 }).map((_, i) => (
+   623→   623→   623→              <Skeleton key={i} className="h-12 w-full" />
+   624→   624→   624→            ))}
+   625→   625→   625→          </div>
+   626→   626→   626→        </Card>
+   627→   627→   627→      ) : certificates.length === 0 ? (
+   628→   628→   628→        <Card className="p-12">
+   629→   629→   629→          <div className="flex flex-col items-center text-center gap-3">
+   630→   630→   630→            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+   631→   631→   631→              <AlertCircle className="w-8 h-8 text-muted-foreground" />
+   632→   632→   632→            </div>
+   633→   633→   633→            <div>
+   634→   634→   634→              <h3 className="font-semibold text-lg">{t('certificates.noCertsFound')}</h3>
+   635→   635→   635→              <p className="text-sm text-muted-foreground mt-1">
+   636→   636→   636→                {hasActiveFilters
+   637→   637→   637→                  ? t('common.tryChangingFilters')
+   638→   638→   638→                  : t('certificates.noCertsYet')}
+   639→   639→   639→              </p>
+   640→   640→   640→            </div>
+   641→   641→   641→            {hasActiveFilters && (
+   642→   642→   642→              <Button variant="outline" onClick={onClearFilters}>
+   643→   643→   643→                {t('common.clearFilters')}
+   644→   644→   644→              </Button>
+   645→   645→   645→            )}
+   646→   646→   646→          </div>
+   647→   647→   647→        </Card>
+   648→   648→   648→      ) : (
+   649→   649→   649→        <Card className="overflow-hidden pt-0 gap-0">
+   650→   650→   650→          <Table>
+   651→   651→   651→            <TableHeader>
+   652→   652→   652→              <TableRow className="bg-muted/40 hover:bg-muted/40">
+   653→   653→   653→                <TableHead className="min-w-[140px]">{t('certificates.certNumber')}</TableHead>
+   654→   654→   654→                <TableHead className="min-w-[180px]">{t('certificates.student')}</TableHead>
+   655→   655→   655→                <TableHead className="min-w-[200px]">{t('certificates.course')}</TableHead>
+   656→   656→   656→                <TableHead className="min-w-[100px]">{t('certificates.score')}</TableHead>
+   657→   657→   657→                <TableHead className="min-w-[120px]">{t('certificates.issuedAt')}</TableHead>
+   658→   658→   658→                <TableHead className="min-w-[110px]">{t('common.status')}</TableHead>
+   659→   659→   659→                <TableHead className="text-right min-w-[140px]">{t('common.actions')}</TableHead>
+   660→   660→   660→              </TableRow>
+   661→   661→   661→            </TableHeader>
+   662→   662→   662→            <TableBody>
+   663→   663→   663→              {certificates.map((cert) => {
+   664→   664→   664→                const u = cert.user
+   665→   665→   665→                const fullName = u
+   666→   666→   666→                  ? `${u.lastName} ${u.firstName}${u.middleName ? ' ' + u.middleName : ''}`
+   667→   667→   667→                  : '—'
+   668→   668→   668→                const initials = u
+   669→   669→   669→                  ? `${u.firstName[0] ?? ''}${u.lastName[0] ?? ''}`.toUpperCase()
+   670→   670→   670→                  : '?'
+   671→   671→   671→                return (
+   672→   672→   672→                  <TableRow key={cert.id} className="hover:bg-muted/30">
+   673→   673→   673→                    <TableCell>
+   674→   674→   674→                      <span className="font-mono text-xs">{cert.certNumber}</span>
+   675→   675→   675→                    </TableCell>
+   676→   676→   676→                    <TableCell>
+   677→   677→   677→                      <div className="flex items-center gap-2 min-w-0">
+   678→   678→   678→                        <Avatar className="w-8 h-8 flex-shrink-0">
+   679→   679→   679→                          <AvatarFallback className="bg-primary/10 text-primary text-xs">
+   680→   680→   680→                            {initials}
+   681→   681→   681→                          </AvatarFallback>
+   682→   682→   682→                        </Avatar>
+   683→   683→   683→                        <span className="text-sm truncate">{fullName}</span>
+   684→   684→   684→                      </div>
+   685→   685→   685→                    </TableCell>
+   686→   686→   686→                    <TableCell className="text-sm">
+   687→   687→   687→                      <span className="line-clamp-1">{cert.course?.title ?? '—'}</span>
+   688→   688→   688→                    </TableCell>
+   689→   689→   689→                    <TableCell>
+   690→   690→   690→                      <Badge variant="outline" className="font-mono text-xs">
+   691→   691→   691→                        {cert.percentage}%
+   692→   692→   692→                      </Badge>
+   693→   693→   693→                      <div className="text-[10px] text-muted-foreground mt-0.5">
+   694→   694→   694→                        {cert.score}/{cert.maxScore}
+   695→   695→   695→                      </div>
+   696→   696→   696→                    </TableCell>
+   697→   697→   697→                    <TableCell className="text-xs text-muted-foreground">
+   698→   698→   698→                      {formatDate(cert.issuedAt)}
+   699→   699→   699→                    </TableCell>
+   700→   700→   700→                    <TableCell>
+   701→   701→   701→                      <StatusBadge status={cert.status} />
+   702→   702→   702→                    </TableCell>
+   703→   703→   703→                    <TableCell className="text-right">
+   704→   704→   704→                      <div className="flex items-center justify-end gap-1">
+   705→   705→   705→                        <Button
+   706→   706→   706→                          size="sm"
+   707→   707→   707→                          variant="ghost"
+   708→   708→   708→                          onClick={() => onView(cert)}
+   709→   709→   709→                          title={t('common.view')}
+   710→   710→   710→                        >
+   711→   711→   711→                          <Eye className="w-4 h-4" />
+   712→   712→   712→                        </Button>
+   713→   713→   713→                        <Button
+   714→   714→   714→                          size="sm"
+   715→   715→   715→                          variant="ghost"
+   716→   716→   716→                          onClick={(e) => onDownload(e, cert)}
+   717→   717→   717→                          title={t('common.download')}
+   718→   718→   718→                        >
+   719→   719→   719→                          <Download className="w-4 h-4" />
+   720→   720→   720→                        </Button>
+   721→   721→   721→                        {cert.status === 'active' && (
+   722→   722→   722→                          <Button
+   723→   723→   723→                            size="sm"
+   724→   724→   724→                            variant="ghost"
+   725→   725→   725→                            onClick={() => onRevoke(cert)}
+   726→   726→   726→                            disabled={revokingId === cert.id}
+   727→   727→   727→                            title={t('certificates.revoke')}
+   728→   728→   728→                            className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+   729→   729→   729→                          >
+   730→   730→   730→                            {revokingId === cert.id ? (
+   731→   731→   731→                              <Loader2 className="w-4 h-4 animate-spin" />
+   732→   732→   732→                            ) : (
+   733→   733→   733→                              <ShieldAlert className="w-4 h-4" />
+   734→   734→   734→                            )}
+   735→   735→   735→                          </Button>
+   736→   736→   736→                        )}
+   737→   737→   737→                      </div>
+   738→   738→   738→                    </TableCell>
+   739→   739→   739→                  </TableRow>
+   740→   740→   740→                )
+   741→   741→   741→              })}
+   742→   742→   742→            </TableBody>
+   743→   743→   743→          </Table>
+   744→   744→   744→        </Card>
+   745→   745→   745→      )}
+   746→   746→   746→
+   747→   747→   747→      {!loading && meta.pages > 1 && (
+   748→   748→   748→        <Pagination page={page} pages={meta.pages} onPageChange={onPageChange} />
+   749→   749→   749→      )}
+   750→   750→   750→
+   751→   751→   751→      {/* Revoke confirmation dialog */}
+   752→   752→   752→      <Dialog open={revokeDialog.open} onOpenChange={(o) => !o && onRevokeClose()}>
+   753→   753→   753→        <DialogContent>
+   754→   754→   754→          <DialogHeader>
+   755→   755→   755→            <DialogTitle className="flex items-center gap-2">
+   756→   756→   756→              <ShieldAlert className="w-5 h-5 text-rose-600" />
+   757→   757→   757→              {t('certificates.revokeTitle')}
+   758→   758→   758→            </DialogTitle>
+   759→   759→   759→            <DialogDescription>
+   760→   760→   760→              {revokeDialog.cert && (
+   761→   761→   761→                <>
+   762→   762→   762→                  {t('certificates.revokeWarning').replace('{certNumber}', revokeDialog.cert.certNumber)}
+   763→   763→   763→                </>
+   764→   764→   764→              )}
+   765→   765→   765→            </DialogDescription>
+   766→   766→   766→          </DialogHeader>
+   767→   767→   767→          <DialogFooter>
+   768→   768→   768→            <Button variant="outline" onClick={onRevokeClose}>
+   769→   769→   769→              {t('common.cancel')}
+   770→   770→   770→            </Button>
+   771→   771→   771→            <Button variant="destructive" onClick={onRevokeConfirm}>
+   772→   772→   772→              {t('common.confirm')}
+   773→   773→   773→            </Button>
+   774→   774→   774→          </DialogFooter>
+   775→   775→   775→        </DialogContent>
+   776→   776→   776→      </Dialog>
+   777→   777→   777→    </div>
+   778→   778→   778→  )
+   779→   779→   779→}
+   780→   780→   780→
+   781→   781→   781→// ============== SHARED COMPONENTS ==============
+   782→   782→   782→
+   783→   783→   783→function StatusBadge({ status }: { status: string }) {
+   784→   784→   784→  const { t } = useTranslation()
+   785→   785→   785→  if (status === 'active') {
+   786→   786→   786→    return (
+   787→   787→   787→      <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100">
+   788→   788→   788→        <ShieldCheck className="w-3 h-3 mr-1" />
+   789→   789→   789→        {t('common.active')}
+   790→   790→   790→      </Badge>
+   791→   791→   791→    )
+   792→   792→   792→  }
+   793→   793→   793→  if (status === 'revoked') {
+   794→   794→   794→    return (
+   795→   795→   795→      <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800 hover:bg-rose-100">
+   796→   796→   796→        <ShieldAlert className="w-3 h-3 mr-1" />
+   797→   797→   797→        {t('common.revoked')}
+   798→   798→   798→      </Badge>
+   799→   799→   799→    )
+   800→   800→   800→  }
+   801→   801→   801→  return <Badge variant="secondary">{status}</Badge>
+   802→   802→   802→}
+   803→   803→   803→
+   804→   804→   804→function Pagination({
+   805→   805→   805→  page,
+   806→   806→   806→  pages,
+   807→   807→   807→  onPageChange,
+   808→   808→   808→}: {
+   809→   809→   809→  page: number
+   810→   810→   810→  pages: number
+   811→   811→   811→  onPageChange: (page: number) => void
+   812→   812→   812→}) {
+   813→   813→   813→  const { t } = useTranslation()
+   814→   814→   814→  return (
+   815→   815→   815→    <div className="flex items-center justify-center gap-2 pt-2">
+   816→   816→   816→      <Button
+   817→   817→   817→        variant="outline"
+   818→   818→   818→        size="sm"
+   819→   819→   819→        disabled={page === 1}
+   820→   820→   820→        onClick={() => onPageChange(Math.max(1, page - 1))}
+   821→   821→   821→      >
+   822→   822→   822→        <ChevronLeft className="w-4 h-4" />
+   823→   823→   823→        {t('common.prev')}
+   824→   824→   824→      </Button>
+   825→   825→   825→      <div className="flex items-center gap-1">
+   826→   826→   826→        {Array.from({ length: Math.min(5, pages) }).map((_, i) => {
+   827→   827→   827→          const startPage = Math.max(1, Math.min(page - 2, pages - 4))
+   828→   828→   828→          const pageNum = startPage + i
+   829→   829→   829→          if (pageNum > pages) return null
+   830→   830→   830→          return (
+   831→   831→   831→            <Button
+   832→   832→   832→              key={pageNum}
+   833→   833→   833→              variant={page === pageNum ? 'default' : 'outline'}
+   834→   834→   834→              size="sm"
+   835→   835→   835→              className="w-9 h-9 p-0"
+   836→   836→   836→              onClick={() => onPageChange(pageNum)}
+   837→   837→   837→            >
+   838→   838→   838→              {pageNum}
+   839→   839→   839→            </Button>
+   840→   840→   840→          )
+   841→   841→   841→        })}
+   842→   842→   842→      </div>
+   843→   843→   843→      <Button
+   844→   844→   844→        variant="outline"
+   845→   845→   845→        size="sm"
+   846→   846→   846→        disabled={page >= pages}
+   847→   847→   847→        onClick={() => onPageChange(Math.min(pages, page + 1))}
+   848→   848→   848→      >
+   849→   849→   849→        {t('common.next')}
+   850→   850→   850→        <ChevronRight className="w-4 h-4" />
+   851→   851→   851→      </Button>
+   852→   852→   852→    </div>
+   853→   853→   853→  )
+   854→   854→   854→}
+   855→   855→   855→

@@ -1,0 +1,558 @@
+    50→    50→    50→export function ReportsView() {
+    51→    51→    51→  const { t } = useTranslation()
+    52→    52→    52→  const [tab, setTab] = useState<ReportType>('overview')
+    53→    53→    53→  const [data, setData] = useState<Record<string, unknown>>({})
+    54→    54→    54→  const [loading, setLoading] = useState(true)
+    55→    55→    55→  const [search, setSearch] = useState('')
+    56→    56→    56→
+    57→    57→    57→  useEffect(() => {
+    58→    58→    58→    Promise.resolve().then(() => setLoading(true))
+    59→    59→    59→    api
+    60→    60→    60→      .get<{ data: Record<string, unknown> }>(`/reports?type=${tab}`)
+    61→    61→    61→      .then((r) => setData(r.data))
+    62→    62→    62→      .catch(() => setData({}))
+    63→    63→    63→      .finally(() => setLoading(false))
+    64→    64→    64→  }, [tab])
+    65→    65→    65→
+    66→    66→    66→  const exportCsv = () => {
+    67→    67→    67→    const rows = extractRows(data, tab)
+    68→    68→    68→    if (!rows.length) return
+    69→    69→    69→    const headers = Object.keys(rows[0])
+    70→    70→    70→    const csv = [
+    71→    71→    71→      headers.join(','),
+    72→    72→    72→      ...rows.map((r) => headers.map((h) => `"${String((r as Record<string, unknown>)[h] ?? '').replace(/"/g, '""')}"`).join(',')),
+    73→    73→    73→    ].join('\n')
+    74→    74→    74→    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' })
+    75→    75→    75→    const url = URL.createObjectURL(blob)
+    76→    76→    76→    const a = document.createElement('a')
+    77→    77→    77→    a.href = url
+    78→    78→    78→    a.download = `${tab}-report.csv`
+    79→    79→    79→    a.click()
+    80→    80→    80→    URL.revokeObjectURL(url)
+    81→    81→    81→  }
+    82→    82→    82→
+    83→    83→    83→  return (
+    84→    84→    84→    <div className="space-y-6">
+    85→    85→    85→      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    86→    86→    86→        <div>
+    87→    87→    87→          <h1 className="text-2xl font-bold">{t('reports.title')}</h1>
+    88→    88→    88→          <p className="text-muted-foreground">{t('reports.subtitle')}</p>
+    89→    89→    89→        </div>
+    90→    90→    90→        <Button onClick={exportCsv} variant="outline">
+    91→    91→    91→          <Download className="w-4 h-4 mr-2" /> {t('common.exportCsv')}
+    92→    92→    92→        </Button>
+    93→    93→    93→      </div>
+    94→    94→    94→
+    95→    95→    95→      <Tabs value={tab} onValueChange={(v) => setTab(v as ReportType)}>
+    96→    96→    96→        <TabsList className="flex flex-wrap h-auto gap-1">
+    97→    97→    97→          <TabsTrigger value="overview"><BarChart3 className="w-4 h-4 mr-1" /> {t('reports.tab.overview')}</TabsTrigger>
+    98→    98→    98→          <TabsTrigger value="students"><Users className="w-4 h-4 mr-1" /> {t('reports.tab.students')}</TabsTrigger>
+    99→    99→    99→          <TabsTrigger value="courses"><BookOpen className="w-4 h-4 mr-1" /> {t('reports.tab.courses')}</TabsTrigger>
+   100→   100→   100→          <TabsTrigger value="quiz-results"><FileQuestion className="w-4 h-4 mr-1" /> {t('reports.tab.quizResults')}</TabsTrigger>
+   101→   101→   101→          <TabsTrigger value="certificates"><Award className="w-4 h-4 mr-1" /> {t('reports.tab.certificates')}</TabsTrigger>
+   102→   102→   102→          <TabsTrigger value="library-usage"><Library className="w-4 h-4 mr-1" /> {t('reports.tab.library')}</TabsTrigger>
+   103→   103→   103→          <TabsTrigger value="audit-log"><Activity className="w-4 h-4 mr-1" /> {t('reports.tab.auditLog')}</TabsTrigger>
+   104→   104→   104→        </TabsList>
+   105→   105→   105→
+   106→   106→   106→        <TabsContent value="overview" className="mt-4">
+   107→   107→   107→          {loading ? <Loading /> : <OverviewReport data={data} />}
+   108→   108→   108→        </TabsContent>
+   109→   109→   109→        <TabsContent value="students" className="mt-4">
+   110→   110→   110→          {loading ? <Loading /> : (
+   111→   111→   111→            <>
+   112→   112→   112→              <Input placeholder={t('reports.searchByName')} value={search} onChange={(e) => setSearch(e.target.value)} className="mb-4 max-w-sm" />
+   113→   113→   113→              <StudentsReport data={data} search={search} />
+   114→   114→   114→            </>
+   115→   115→   115→          )}
+   116→   116→   116→        </TabsContent>
+   117→   117→   117→        <TabsContent value="courses" className="mt-4">
+   118→   118→   118→          {loading ? <Loading /> : <CoursesReport data={data} />}
+   119→   119→   119→        </TabsContent>
+   120→   120→   120→        <TabsContent value="quiz-results" className="mt-4">
+   121→   121→   121→          {loading ? <Loading /> : <QuizResultsReport data={data} />}
+   122→   122→   122→        </TabsContent>
+   123→   123→   123→        <TabsContent value="certificates" className="mt-4">
+   124→   124→   124→          {loading ? <Loading /> : <CertificatesReport data={data} />}
+   125→   125→   125→        </TabsContent>
+   126→   126→   126→        <TabsContent value="library-usage" className="mt-4">
+   127→   127→   127→          {loading ? <Loading /> : <LibraryUsageReport data={data} />}
+   128→   128→   128→        </TabsContent>
+   129→   129→   129→        <TabsContent value="audit-log" className="mt-4">
+   130→   130→   130→          {loading ? <Loading /> : <AuditLogReport data={data} />}
+   131→   131→   131→        </TabsContent>
+   132→   132→   132→      </Tabs>
+   133→   133→   133→    </div>
+   134→   134→   134→  )
+   135→   135→   135→}
+   136→   136→   136→
+   137→   137→   137→function Loading() {
+   138→   138→   138→  const { t } = useTranslation()
+   139→   139→   139→  return (
+   140→   140→   140→    <div className="space-y-3">
+   141→   141→   141→      <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+   142→   142→   142→      {Array.from({ length: 4 }).map((_, i) => (
+   143→   143→   143→        <div key={i} className="h-16 rounded-lg bg-muted animate-pulse" />
+   144→   144→   144→      ))}
+   145→   145→   145→    </div>
+   146→   146→   146→  )
+   147→   147→   147→}
+   148→   148→   148→
+   149→   149→   149→function extractRows(data: Record<string, unknown>, tab: string): Record<string, unknown>[] {
+   150→   150→   150→  const keys: Record<string, string> = {
+   151→   151→   151→    students: 'students',
+   152→   152→   152→    courses: 'courses',
+   153→   153→   153→    'quiz-results': 'attempts',
+   154→   154→   154→    certificates: 'certificates',
+   155→   155→   155→    'library-usage': 'resources',
+   156→   156→   156→    'audit-log': 'logs',
+   157→   157→   157→  }
+   158→   158→   158→  const k = keys[tab]
+   159→   159→   159→  if (!k) return []
+   160→   160→   160→  const v = data[k]
+   161→   161→   161→  return Array.isArray(v) ? (v as Record<string, unknown>[]) : []
+   162→   162→   162→}
+   163→   163→   163→
+   164→   164→   164→function StatBox({ icon: Icon, label, value, sub }: { icon: typeof Users; label: string; value: string | number; sub?: string }) {
+   165→   165→   165→  return (
+   166→   166→   166→    <Card>
+   167→   167→   167→      <CardContent className="p-5">
+   168→   168→   168→        <div className="flex items-center justify-between">
+   169→   169→   169→          <div>
+   170→   170→   170→            <p className="text-xs text-muted-foreground">{label}</p>
+   171→   171→   171→            <p className="text-2xl font-bold mt-1">{value}</p>
+   172→   172→   172→            {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+   173→   173→   173→          </div>
+   174→   174→   174→          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+   175→   175→   175→            <Icon className="w-5 h-5 text-primary" />
+   176→   176→   176→          </div>
+   177→   177→   177→        </div>
+   178→   178→   178→      </CardContent>
+   179→   179→   179→    </Card>
+   180→   180→   180→  )
+   181→   181→   181→}
+   182→   182→   182→
+   183→   183→   183→function OverviewReport({ data }: { data: Record<string, unknown> }) {
+   184→   184→   184→  const { t } = useTranslation()
+   185→   185→   185→  const o = (data.overview ?? {}) as Record<string, number>
+   186→   186→   186→  return (
+   187→   187→   187→    <div className="space-y-6">
+   188→   188→   188→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+   189→   189→   189→        <StatBox icon={Users} label={t('dashboard.totalStudents')} value={o.totalStudents ?? 0} />
+   190→   190→   190→        <StatBox icon={Users} label={t('dashboard.totalTutors')} value={o.totalTutors ?? 0} />
+   191→   191→   191→        <StatBox icon={BookOpen} label={t('dashboard.totalCourses')} value={o.totalCourses ?? 0} />
+   192→   192→   192→        <StatBox icon={Award} label={t('dashboard.totalCertificates')} value={o.totalCertificates ?? 0} />
+   193→   193→   193→        <StatBox icon={FileQuestion} label={t('reports.testAttemptsLabel')} value={o.totalAttempts ?? 0} sub={t('reports.attemptsPassed').replace('{n}', String(o.passedAttempts ?? 0))} />
+   194→   194→   194→        <StatBox icon={Activity} label={t('reports.passRate')} value={`${o.passRate ?? 0}%`} />
+   195→   195→   195→        <StatBox icon={BookOpen} label={t('dashboard.totalEnrollments')} value={o.totalEnrollments ?? 0} sub={t('reports.enrollmentsCompleted').replace('{n}', String(o.completedEnrollments ?? 0))} />
+   196→   196→   196→        <StatBox icon={Library} label={t('nav.library')} value={o.totalResources ?? 0} sub={t('reports.resourcesDownloaded').replace('{n}', String(o.totalDownloads ?? 0))} />
+   197→   197→   197→      </div>
+   198→   198→   198→      <Card>
+   199→   199→   199→        <CardHeader>
+   200→   200→   200→          <CardTitle>{t('reports.systemHealth')}</CardTitle>
+   201→   201→   201→          <CardDescription>{t('reports.generalIndicators')}</CardDescription>
+   202→   202→   202→        </CardHeader>
+   203→   203→   203→        <CardContent>
+   204→   204→   204→          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+   205→   205→   205→            <div className="p-4 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-900">
+   206→   206→   206→              <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-400">{o.completionRate ?? 0}%</div>
+   207→   207→   207→              <div className="text-sm text-muted-foreground">{t('reports.completionRate')}</div>
+   208→   208→   208→            </div>
+   209→   209→   209→            <div className="p-4 rounded-lg bg-teal-50 dark:bg-teal-900/20 border border-teal-200 dark:border-teal-900">
+   210→   210→   210→              <div className="text-3xl font-bold text-teal-700 dark:text-teal-400">{o.passRate ?? 0}%</div>
+   211→   211→   211→              <div className="text-sm text-muted-foreground">{t('reports.passRate')}</div>
+   212→   212→   212→            </div>
+   213→   213→   213→            <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900">
+   214→   214→   214→              <div className="text-3xl font-bold text-amber-700 dark:text-amber-400">{o.totalDownloads ?? 0}</div>
+   215→   215→   215→              <div className="text-sm text-muted-foreground">{t('reports.totalDownloads')}</div>
+   216→   216→   216→            </div>
+   217→   217→   217→          </div>
+   218→   218→   218→        </CardContent>
+   219→   219→   219→      </Card>
+   220→   220→   220→    </div>
+   221→   221→   221→  )
+   222→   222→   222→}
+   223→   223→   223→
+   224→   224→   224→function StudentsReport({ data, search }: { data: Record<string, unknown>; search: string }) {
+   225→   225→   225→  const { t } = useTranslation()
+   226→   226→   226→  const students = (data.students ?? []) as Array<Record<string, unknown>>
+   227→   227→   227→  const filtered = students.filter((s) =>
+   228→   228→   228→    search ? String(s.name).toLowerCase().includes(search.toLowerCase()) || String(s.email).toLowerCase().includes(search.toLowerCase()) : true
+   229→   229→   229→  )
+   230→   230→   230→  return (
+   231→   231→   231→    <Card>
+   232→   232→   232→      <CardContent className="p-0">
+   233→   233→   233→        <div className="overflow-x-auto scroll-area max-h-[600px]">
+   234→   234→   234→          <Table>
+   235→   235→   235→            <TableHeader className="sticky top-0 bg-card z-10">
+   236→   236→   236→              <TableRow>
+   237→   237→   237→                <TableHead>{t('reports.studentsHeader')}</TableHead>
+   238→   238→   238→                <TableHead>{t('users.department')}</TableHead>
+   239→   239→   239→                <TableHead className="text-center">{t('dashboard.totalCourses')}</TableHead>
+   240→   240→   240→                <TableHead className="text-center">{t('common.completed')}</TableHead>
+   241→   241→   241→                <TableHead className="text-center">{t('courses.progress')}</TableHead>
+   242→   242→   242→                <TableHead className="text-center">{t('reports.certShort')}</TableHead>
+   243→   243→   243→                <TableHead className="text-center">{t('nav.quizzes')}</TableHead>
+   244→   244→   244→                <TableHead className="text-center">{t('common.passed')}</TableHead>
+   245→   245→   245→                <TableHead>{t('users.lastLogin')}</TableHead>
+   246→   246→   246→              </TableRow>
+   247→   247→   247→            </TableHeader>
+   248→   248→   248→            <TableBody>
+   249→   249→   249→              {filtered.map((s) => (
+   250→   250→   250→                <TableRow key={String(s.id)}>
+   251→   251→   251→                  <TableCell>
+   252→   252→   252→                    <div className="font-medium">{String(s.name)}</div>
+   253→   253→   253→                    <div className="text-xs text-muted-foreground">{String(s.email)}</div>
+   254→   254→   254→                  </TableCell>
+   255→   255→   255→                  <TableCell className="text-sm">{String(s.department)}</TableCell>
+   256→   256→   256→                  <TableCell className="text-center">{Number(s.enrolledCourses)}</TableCell>
+   257→   257→   257→                  <TableCell className="text-center">{Number(s.completedCourses)}</TableCell>
+   258→   258→   258→                  <TableCell className="text-center">
+   259→   259→   259→                    <Badge variant="secondary">{Number(s.avgProgress)}%</Badge>
+   260→   260→   260→                  </TableCell>
+   261→   261→   261→                  <TableCell className="text-center">{Number(s.certificates)}</TableCell>
+   262→   262→   262→                  <TableCell className="text-center">{Number(s.attempts)}</TableCell>
+   263→   263→   263→                  <TableCell className="text-center">{Number(s.passedAttempts)}</TableCell>
+   264→   264→   264→                  <TableCell className="text-xs text-muted-foreground">{s.lastLoginAt ? timeAgo(String(s.lastLoginAt)) : '-'}</TableCell>
+   265→   265→   265→                </TableRow>
+   266→   266→   266→              ))}
+   267→   267→   267→            </TableBody>
+   268→   268→   268→          </Table>
+   269→   269→   269→        </div>
+   270→   270→   270→      </CardContent>
+   271→   271→   271→    </Card>
+   272→   272→   272→  )
+   273→   273→   273→}
+   274→   274→   274→
+   275→   275→   275→function CoursesReport({ data }: { data: Record<string, unknown> }) {
+   276→   276→   276→  const { t } = useTranslation()
+   277→   277→   277→  const courses = (data.courses ?? []) as Array<Record<string, unknown>>
+   278→   278→   278→  const chartData = courses.map((c) => ({
+   279→   279→   279→    name: String(c.title).slice(0, 15) + '...',
+   280→   280→   280→    students: Number(c.enrolled),
+   281→   281→   281→    completed: Number(c.completed),
+   282→   282→   282→  }))
+   283→   283→   283→  return (
+   284→   284→   284→    <div className="space-y-6">
+   285→   285→   285→      <Card>
+   286→   286→   286→        <CardHeader>
+   287→   287→   287→          <CardTitle>{t('reports.coursesByStudents')}</CardTitle>
+   288→   288→   288→        </CardHeader>
+   289→   289→   289→        <CardContent>
+   290→   290→   290→          <ResponsiveContainer width="100%" height={300}>
+   291→   291→   291→            <BarChart data={chartData}>
+   292→   292→   292→              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+   293→   293→   293→              <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-15} textAnchor="end" height={60} />
+   294→   294→   294→              <YAxis tick={{ fontSize: 11 }} />
+   295→   295→   295→              <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+   296→   296→   296→              <Legend />
+   297→   297→   297→              <Bar dataKey="students" name={t('reports.chart.students')} fill="#0f766e" radius={[4, 4, 0, 0]} />
+   298→   298→   298→              <Bar dataKey="completed" name={t('reports.chart.completed')} fill="#84cc16" radius={[4, 4, 0, 0]} />
+   299→   299→   299→            </BarChart>
+   300→   300→   300→          </ResponsiveContainer>
+   301→   301→   301→        </CardContent>
+   302→   302→   302→      </Card>
+   303→   303→   303→      <Card>
+   304→   304→   304→        <CardContent className="p-0">
+   305→   305→   305→          <div className="overflow-x-auto scroll-area max-h-[500px]">
+   306→   306→   306→            <Table>
+   307→   307→   307→              <TableHeader className="sticky top-0 bg-card z-10">
+   308→   308→   308→                <TableRow>
+   309→   309→   309→                  <TableHead>{t('reports.courseHeader')}</TableHead>
+   310→   310→   310→                  <TableHead>{t('reports.categoryHeader')}</TableHead>
+   311→   311→   311→                  <TableHead>{t('reports.tutorHeader')}</TableHead>
+   312→   312→   312→                  <TableHead className="text-center">{t('reports.lessonsHeader')}</TableHead>
+   313→   313→   313→                  <TableHead className="text-center">{t('dashboard.totalStudents')}</TableHead>
+   314→   314→   314→                  <TableHead className="text-center">{t('reports.completionPercent')}</TableHead>
+   315→   315→   315→                  <TableHead className="text-center">{t('reports.avgProgress')}</TableHead>
+   316→   316→   316→                </TableRow>
+   317→   317→   317→              </TableHeader>
+   318→   318→   318→              <TableBody>
+   319→   319→   319→                {courses.map((c) => (
+   320→   320→   320→                  <TableRow key={String(c.id)}>
+   321→   321→   321→                    <TableCell className="font-medium">{String(c.title)}</TableCell>
+   322→   322→   322→                    <TableCell className="text-sm">{String(c.category)}</TableCell>
+   323→   323→   323→                    <TableCell className="text-sm">{String(c.tutor)}</TableCell>
+   324→   324→   324→                    <TableCell className="text-center">{Number(c.lessons)}</TableCell>
+   325→   325→   325→                    <TableCell className="text-center">{Number(c.enrolled)}</TableCell>
+   326→   326→   326→                    <TableCell className="text-center"><Badge variant="secondary">{Number(c.completionRate)}%</Badge></TableCell>
+   327→   327→   327→                    <TableCell className="text-center">{Number(c.avgProgress)}%</TableCell>
+   328→   328→   328→                  </TableRow>
+   329→   329→   329→                ))}
+   330→   330→   330→              </TableBody>
+   331→   331→   331→            </Table>
+   332→   332→   332→          </div>
+   333→   333→   333→        </CardContent>
+   334→   334→   334→      </Card>
+   335→   335→   335→    </div>
+   336→   336→   336→  )
+   337→   337→   337→}
+   338→   338→   338→
+   339→   339→   339→function QuizResultsReport({ data }: { data: Record<string, unknown> }) {
+   340→   340→   340→  const { t } = useTranslation()
+   341→   341→   341→  const attempts = (data.attempts ?? []) as Array<Record<string, unknown>>
+   342→   342→   342→  const dist = (data.distribution ?? []) as Array<{ range: string; count: number }>
+   343→   343→   343→  return (
+   344→   344→   344→    <div className="space-y-6">
+   345→   345→   345→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   346→   346→   346→        <Card>
+   347→   347→   347→          <CardHeader>
+   348→   348→   348→            <CardTitle>{t('reports.scoreDistribution')}</CardTitle>
+   349→   349→   349→            <CardDescription>{t('reports.quizResultsDesc')}</CardDescription>
+   350→   350→   350→          </CardHeader>
+   351→   351→   351→          <CardContent>
+   352→   352→   352→            <ResponsiveContainer width="100%" height={250}>
+   353→   353→   353→              <BarChart data={dist}>
+   354→   354→   354→                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+   355→   355→   355→                <XAxis dataKey="range" tick={{ fontSize: 11 }} />
+   356→   356→   356→                <YAxis tick={{ fontSize: 11 }} />
+   357→   357→   357→                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+   358→   358→   358→                <Bar dataKey="count" name={t('reports.chart.students')} fill="#0f766e" radius={[4, 4, 0, 0]} />
+   359→   359→   359→              </BarChart>
+   360→   360→   360→            </ResponsiveContainer>
+   361→   361→   361→          </CardContent>
+   362→   362→   362→        </Card>
+   363→   363→   363→        <Card>
+   364→   364→   364→          <CardHeader>
+   365→   365→   365→            <CardTitle>{t('reports.generalIndicators')}</CardTitle>
+   366→   366→   366→          </CardHeader>
+   367→   367→   367→          <CardContent className="space-y-3">
+   368→   368→   368→            <div className="flex justify-between"><span className="text-muted-foreground">{t('reports.totalAttemptsLabel')}</span><span className="font-semibold">{(data.total as number) ?? 0}</span></div>
+   369→   369→   369→            <div className="flex justify-between"><span className="text-muted-foreground">{t('reports.totalPassed')}:</span><span className="font-semibold text-emerald-600">{attempts.filter((a) => a.passed).length}</span></div>
+   370→   370→   370→            <div className="flex justify-between"><span className="text-muted-foreground">{t('reports.totalFailed')}:</span><span className="font-semibold text-red-600">{attempts.filter((a) => !a.passed).length}</span></div>
+   371→   371→   371→          </CardContent>
+   372→   372→   372→        </Card>
+   373→   373→   373→      </div>
+   374→   374→   374→      <Card>
+   375→   375→   375→        <CardContent className="p-0">
+   376→   376→   376→          <div className="overflow-x-auto scroll-area max-h-[500px]">
+   377→   377→   377→            <Table>
+   378→   378→   378→              <TableHeader className="sticky top-0 bg-card z-10">
+   379→   379→   379→                <TableRow>
+   380→   380→   380→                  <TableHead>{t('reports.studentsHeader')}</TableHead>
+   381→   381→   381→                  <TableHead>{t('reports.quizHeader')}</TableHead>
+   382→   382→   382→                  <TableHead>{t('reports.courseHeader')}</TableHead>
+   383→   383→   383→                  <TableHead className="text-center">{t('reports.scoreShort')}</TableHead>
+   384→   384→   384→                  <TableHead className="text-center">{t('reports.percentShort')}</TableHead>
+   385→   385→   385→                  <TableHead className="text-center">{t('common.status')}</TableHead>
+   386→   386→   386→                  <TableHead>{t('common.date')}</TableHead>
+   387→   387→   387→                </TableRow>
+   388→   388→   388→              </TableHeader>
+   389→   389→   389→              <TableBody>
+   390→   390→   390→                {attempts.map((a) => (
+   391→   391→   391→                  <TableRow key={String(a.id)}>
+   392→   392→   392→                    <TableCell className="font-medium">{String(a.student)}</TableCell>
+   393→   393→   393→                    <TableCell className="text-sm">{String(a.quiz)}</TableCell>
+   394→   394→   394→                    <TableCell className="text-sm">{String(a.course)}</TableCell>
+   395→   395→   395→                    <TableCell className="text-center">{Number(a.score)}/{Number(a.maxScore)}</TableCell>
+   396→   396→   396→                    <TableCell className="text-center"><Badge variant="secondary">{Number(a.percentage)}%</Badge></TableCell>
+   397→   397→   397→                    <TableCell className="text-center">
+   398→   398→   398→                      <Badge variant={a.passed ? 'default' : 'destructive'}>{a.passed ? t('common.passed') : t('common.failed')}</Badge>
+   399→   399→   399→                    </TableCell>
+   400→   400→   400→                    <TableCell className="text-xs text-muted-foreground">{a.submittedAt ? formatDateTime(String(a.submittedAt)) : '-'}</TableCell>
+   401→   401→   401→                  </TableRow>
+   402→   402→   402→                ))}
+   403→   403→   403→              </TableBody>
+   404→   404→   404→            </Table>
+   405→   405→   405→          </div>
+   406→   406→   406→        </CardContent>
+   407→   407→   407→      </Card>
+   408→   408→   408→    </div>
+   409→   409→   409→  )
+   410→   410→   410→}
+   411→   411→   411→
+   412→   412→   412→function CertificatesReport({ data }: { data: Record<string, unknown> }) {
+   413→   413→   413→  const { t } = useTranslation()
+   414→   414→   414→  const certs = (data.certificates ?? []) as Array<Record<string, unknown>>
+   415→   415→   415→  const monthly = (data.monthly ?? []) as Array<{ month: string; count: number }>
+   416→   416→   416→  const statusData = [
+   417→   417→   417→    { name: t('reports.statusActive'), value: certs.filter((c) => c.status === 'active').length },
+   418→   418→   418→    { name: t('reports.statusRevoked'), value: certs.filter((c) => c.status === 'revoked').length },
+   419→   419→   419→  ]
+   420→   420→   420→  return (
+   421→   421→   421→    <div className="space-y-6">
+   422→   422→   422→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+   423→   423→   423→        <Card>
+   424→   424→   424→          <CardHeader>
+   425→   425→   425→            <CardTitle>{t('reports.monthlyDynamics')}</CardTitle>
+   426→   426→   426→          </CardHeader>
+   427→   427→   427→          <CardContent>
+   428→   428→   428→            <ResponsiveContainer width="100%" height={250}>
+   429→   429→   429→              <LineChart data={monthly.map((m) => ({ name: m.month, certificates: m.count }))}>
+   430→   430→   430→                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+   431→   431→   431→                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+   432→   432→   432→                <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+   433→   433→   433→                <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+   434→   434→   434→                <Line type="monotone" dataKey="certificates" name={t('reports.chart.certificates')} stroke="#0f766e" strokeWidth={2} dot={{ r: 4 }} />
+   435→   435→   435→              </LineChart>
+   436→   436→   436→            </ResponsiveContainer>
+   437→   437→   437→          </CardContent>
+   438→   438→   438→        </Card>
+   439→   439→   439→        <Card>
+   440→   440→   440→          <CardHeader>
+   441→   441→   441→            <CardTitle>{t('reports.statusDistribution')}</CardTitle>
+   442→   442→   442→          </CardHeader>
+   443→   443→   443→          <CardContent>
+   444→   444→   444→            <ResponsiveContainer width="100%" height={250}>
+   445→   445→   445→              <PieChart>
+   446→   446→   446→                <Pie data={statusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+   447→   447→   447→                  {statusData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
+   448→   448→   448→                </Pie>
+   449→   449→   449→                <Legend />
+   450→   450→   450→                <Tooltip />
+   451→   451→   451→              </PieChart>
+   452→   452→   452→            </ResponsiveContainer>
+   453→   453→   453→          </CardContent>
+   454→   454→   454→        </Card>
+   455→   455→   455→      </div>
+   456→   456→   456→      <Card>
+   457→   457→   457→        <CardContent className="p-0">
+   458→   458→   458→          <div className="overflow-x-auto scroll-area max-h-[500px]">
+   459→   459→   459→            <Table>
+   460→   460→   460→              <TableHeader className="sticky top-0 bg-card z-10">
+   461→   461→   461→                <TableRow>
+   462→   462→   462→                  <TableHead>{t('reports.certNumberShort')}</TableHead>
+   463→   463→   463→                  <TableHead>{t('certificates.student')}</TableHead>
+   464→   464→   464→                  <TableHead>{t('certificates.course')}</TableHead>
+   465→   465→   465→                  <TableHead className="text-center">{t('certificates.score')}</TableHead>
+   466→   466→   466→                  <TableHead className="text-center">{t('common.status')}</TableHead>
+   467→   467→   467→                  <TableHead>{t('reports.issued')}</TableHead>
+   468→   468→   468→                  <TableHead>{t('reports.validUntilShort')}</TableHead>
+   469→   469→   469→                </TableRow>
+   470→   470→   470→              </TableHeader>
+   471→   471→   471→              <TableBody>
+   472→   472→   472→                {certs.map((c) => (
+   473→   473→   473→                  <TableRow key={String(c.id)}>
+   474→   474→   474→                    <TableCell className="font-mono text-xs">{String(c.certNumber)}</TableCell>
+   475→   475→   475→                    <TableCell className="font-medium">{String(c.student)}</TableCell>
+   476→   476→   476→                    <TableCell className="text-sm">{String(c.course)}</TableCell>
+   477→   477→   477→                    <TableCell className="text-center"><Badge variant="secondary">{Number(c.percentage)}%</Badge></TableCell>
+   478→   478→   478→                    <TableCell className="text-center">
+   479→   479→   479→                      <Badge variant={c.status === 'active' ? 'default' : 'destructive'}>{c.status === 'active' ? t('reports.statusActive') : t('reports.revokedShort')}</Badge>
+   480→   480→   480→                    </TableCell>
+   481→   481→   481→                    <TableCell className="text-xs">{formatDate(String(c.issuedAt))}</TableCell>
+   482→   482→   482→                    <TableCell className="text-xs text-muted-foreground">{c.validUntil ? formatDate(String(c.validUntil)) : t('common.unlimited')}</TableCell>
+   483→   483→   483→                  </TableRow>
+   484→   484→   484→                ))}
+   485→   485→   485→              </TableBody>
+   486→   486→   486→            </Table>
+   487→   487→   487→          </div>
+   488→   488→   488→        </CardContent>
+   489→   489→   489→      </Card>
+   490→   490→   490→    </div>
+   491→   491→   491→  )
+   492→   492→   492→}
+   493→   493→   493→
+   494→   494→   494→function LibraryUsageReport({ data }: { data: Record<string, unknown> }) {
+   495→   495→   495→  const { t } = useTranslation()
+   496→   496→   496→  const resources = (data.resources ?? []) as Array<Record<string, unknown>>
+   497→   497→   497→  const top10 = resources.slice(0, 10).map((r) => ({
+   498→   498→   498→    name: String(r.title).slice(0, 15) + '...',
+   499→   499→   499→    downloads: Number(r.downloads),
+   500→   500→   500→    views: Number(r.views),
+   501→   501→   501→  }))
+   502→   502→   502→  return (
+   503→   503→   503→    <div className="space-y-6">
+   504→   504→   504→      <Card>
+   505→   505→   505→        <CardHeader>
+   506→   506→   506→          <CardTitle>{t('reports.topResources')}</CardTitle>
+   507→   507→   507→        </CardHeader>
+   508→   508→   508→        <CardContent>
+   509→   509→   509→          <ResponsiveContainer width="100%" height={300}>
+   510→   510→   510→            <BarChart data={top10} layout="vertical">
+   511→   511→   511→              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+   512→   512→   512→              <XAxis type="number" tick={{ fontSize: 11 }} />
+   513→   513→   513→              <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 10 }} />
+   514→   514→   514→              <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #e5e7eb' }} />
+   515→   515→   515→              <Legend />
+   516→   516→   516→              <Bar dataKey="downloads" name={t('reports.chart.downloads')} fill="#0f766e" radius={[0, 4, 4, 0]} />
+   517→   517→   517→              <Bar dataKey="views" name={t('reports.chart.views')} fill="#84cc16" radius={[0, 4, 4, 0]} />
+   518→   518→   518→            </BarChart>
+   519→   519→   519→          </ResponsiveContainer>
+   520→   520→   520→        </CardContent>
+   521→   521→   521→      </Card>
+   522→   522→   522→      <Card>
+   523→   523→   523→        <CardContent className="p-0">
+   524→   524→   524→          <div className="overflow-x-auto scroll-area max-h-[500px]">
+   525→   525→   525→            <Table>
+   526→   526→   526→              <TableHeader className="sticky top-0 bg-card z-10">
+   527→   527→   527→                <TableRow>
+   528→   528→   528→                  <TableHead>{t('reports.resource')}</TableHead>
+   529→   529→   529→                  <TableHead>{t('common.type')}</TableHead>
+   530→   530→   530→                  <TableHead>{t('reports.categoryHeader')}</TableHead>
+   531→   531→   531→                  <TableHead>{t('library.author')}</TableHead>
+   532→   532→   532→                  <TableHead className="text-center">{t('library.downloads')}</TableHead>
+   533→   533→   533→                  <TableHead className="text-center">{t('library.views')}</TableHead>
+   534→   534→   534→                  <TableHead className="text-center">{t('reports.bookmarks')}</TableHead>
+   535→   535→   535→                </TableRow>
+   536→   536→   536→              </TableHeader>
+   537→   537→   537→              <TableBody>
+   538→   538→   538→                {resources.map((r) => (
+   539→   539→   539→                  <TableRow key={String(r.id)}>
+   540→   540→   540→                    <TableCell className="font-medium">{String(r.title)}</TableCell>
+   541→   541→   541→                    <TableCell><Badge variant="outline" className="capitalize">{String(r.type)}</Badge></TableCell>
+   542→   542→   542→                    <TableCell className="text-sm">{String(r.category)}</TableCell>
+   543→   543→   543→                    <TableCell className="text-sm">{String(r.author)}</TableCell>
+   544→   544→   544→                    <TableCell className="text-center">{Number(r.downloads)}</TableCell>
+   545→   545→   545→                    <TableCell className="text-center">{Number(r.views)}</TableCell>
+   546→   546→   546→                    <TableCell className="text-center">{Number(r.bookmarks)}</TableCell>
+   547→   547→   547→                  </TableRow>
+   548→   548→   548→                ))}
+   549→   549→   549→              </TableBody>
+   550→   550→   550→            </Table>
+   551→   551→   551→          </div>
+   552→   552→   552→        </CardContent>
+   553→   553→   553→      </Card>
+   554→   554→   554→    </div>
+   555→   555→   555→  )
+   556→   556→   556→}
+   557→   557→   557→
+   558→   558→   558→function AuditLogReport({ data }: { data: Record<string, unknown> }) {
+   559→   559→   559→  const { t } = useTranslation()
+   560→   560→   560→  const logs = (data.logs ?? []) as Array<Record<string, unknown>>
+   561→   561→   561→  const actionColors: Record<string, string> = {
+   562→   562→   562→    login: 'bg-emerald-100 text-emerald-700',
+   563→   563→   563→    logout: 'bg-gray-100 text-gray-700',
+   564→   564→   564→    view_course: 'bg-blue-100 text-blue-700',
+   565→   565→   565→    take_quiz: 'bg-amber-100 text-amber-700',
+   566→   566→   566→    download_resource: 'bg-purple-100 text-purple-700',
+   567→   567→   567→    view_certificate: 'bg-teal-100 text-teal-700',
+   568→   568→   568→  }
+   569→   569→   569→  return (
+   570→   570→   570→    <Card>
+   571→   571→   571→      <CardContent className="p-0">
+   572→   572→   572→        <div className="overflow-x-auto scroll-area max-h-[600px]">
+   573→   573→   573→          <Table>
+   574→   574→   574→            <TableHeader className="sticky top-0 bg-card z-10">
+   575→   575→   575→              <TableRow>
+   576→   576→   576→                <TableHead>{t('reports.userHeader')}</TableHead>
+   577→   577→   577→                <TableHead>{t('reports.roleHeader')}</TableHead>
+   578→   578→   578→                <TableHead>{t('reports.action')}</TableHead>
+   579→   579→   579→                <TableHead>{t('reports.ipAddress')}</TableHead>
+   580→   580→   580→                <TableHead>{t('reports.time')}</TableHead>
+   581→   581→   581→              </TableRow>
+   582→   582→   582→            </TableHeader>
+   583→   583→   583→            <TableBody>
+   584→   584→   584→              {logs.map((l) => (
+   585→   585→   585→                <TableRow key={String(l.id)}>
+   586→   586→   586→                  <TableCell>
+   587→   587→   587→                    <div className="font-medium">{String(l.user)}</div>
+   588→   588→   588→                    <div className="text-xs text-muted-foreground">{String(l.email)}</div>
+   589→   589→   589→                  </TableCell>
+   590→   590→   590→                  <TableCell><Badge variant="outline" className="capitalize">{String(l.role)}</Badge></TableCell>
+   591→   591→   591→                  <TableCell>
+   592→   592→   592→                    <span className={`inline-block px-2 py-0.5 rounded text-xs font-medium ${actionColors[String(l.action)] ?? 'bg-gray-100 text-gray-700'}`}>
+   593→   593→   593→                      {String(l.action)}
+   594→   594→   594→                    </span>
+   595→   595→   595→                  </TableCell>
+   596→   596→   596→                  <TableCell className="text-xs font-mono">{String(l.ipAddress)}</TableCell>
+   597→   597→   597→                  <TableCell className="text-xs text-muted-foreground">{formatDateTime(String(l.createdAt))}</TableCell>
+   598→   598→   598→                </TableRow>
+   599→   599→   599→              ))}
+   600→   600→   600→            </TableBody>
+   601→   601→   601→          </Table>
+   602→   602→   602→        </div>
+   603→   603→   603→      </CardContent>
+   604→   604→   604→    </Card>
+   605→   605→   605→  )
+   606→   606→   606→}
+   607→   607→   607→
