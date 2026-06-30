@@ -1,0 +1,856 @@
+     1→'use client'
+     2→
+     3→import { useEffect, useState, useMemo, useCallback } from 'react'
+     4→import { api, formatDate, type Certificate } from '@/lib/api'
+     5→import { useAuth, useNav } from '@/store/auth'
+     6→import { Card, CardContent, CardFooter } from '@/components/ui/card'
+     7→import { Button } from '@/components/ui/button'
+     8→import { Badge } from '@/components/ui/badge'
+     9→import { Input } from '@/components/ui/input'
+    10→import { Skeleton } from '@/components/ui/skeleton'
+    11→import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+    12→import {
+    13→  Table,
+    14→  TableBody,
+    15→  TableCell,
+    16→  TableHead,
+    17→  TableHeader,
+    18→  TableRow,
+    19→} from '@/components/ui/table'
+    20→import {
+    21→  Select,
+    22→  SelectContent,
+    23→  SelectItem,
+    24→  SelectTrigger,
+    25→  SelectValue,
+    26→} from '@/components/ui/select'
+    27→import {
+    28→  Dialog,
+    29→  DialogContent,
+    30→  DialogDescription,
+    31→  DialogFooter,
+    32→  DialogHeader,
+    33→  DialogTitle,
+    34→} from '@/components/ui/dialog'
+    35→import {
+    36→  Award,
+    37→  Search,
+    38→  Eye,
+    39→  Download,
+    40→  X,
+    41→  AlertCircle,
+    42→  Sparkles,
+    43→  ShieldCheck,
+    44→  ShieldAlert,
+    45→  Calendar,
+    46→  Hash,
+    47→  TrendingUp,
+    48→  Loader2,
+    49→  ChevronLeft,
+    50→  ChevronRight,
+    51→} from 'lucide-react'
+    52→import { useToast } from '@/hooks/use-toast'
+    53→import { useTranslation } from '@/lib/i18n'
+    54→
+    55→interface CertificatesResponse {
+    56→  status: string
+    57→  data: Certificate[]
+    58→  meta?: { total: number; page: number; pages: number; limit: number }
+    59→}
+    60→
+    61→interface AutoGenResponse {
+    62→  status: string
+    63→  data: {
+    64→    created: number
+    65→    certificates: Array<{ certNumber: string; studentName: string; courseTitle: string }>
+    66→    message: string
+    67→  }
+    68→}
+    69→
+    70→const PAGE_SIZE = 12
+    71→
+    72→export function CertificatesView() {
+    73→  const user = useAuth((s) => s.user)!
+    74→  const navigate = useNav((s) => s.navigate)
+    75→  const { toast } = useToast()
+    76→  const { t } = useTranslation()
+    77→
+    78→  const isStaff = user.role === 'tutor' || user.role === 'admin'
+    79→
+    80→  const [certificates, setCertificates] = useState<Certificate[]>([])
+    81→  const [loading, setLoading] = useState(true)
+    82→  const [page, setPage] = useState(1)
+    83→  const [meta, setMeta] = useState<{ total: number; pages: number }>({ total: 0, pages: 1 })
+    84→
+    85→  const [search, setSearch] = useState('')
+    86→  const [debouncedSearch, setDebouncedSearch] = useState('')
+    87→  const [courseId, setCourseId] = useState<string>('all')
+    88→  const [status, setStatus] = useState<string>('all')
+    89→  const [courses, setCourses] = useState<Array<{ id: string; title: string }>>([])
+    90→
+    91→  const [autoGenerating, setAutoGenerating] = useState(false)
+    92→  const [revokingId, setRevokingId] = useState<string | null>(null)
+    93→  const [revokeDialog, setRevokeDialog] = useState<{ open: boolean; cert: Certificate | null }>({
+    94→    open: false,
+    95→    cert: null,
+    96→  })
+    97→
+    98→  // Debounce search input
+    99→  useEffect(() => {
+   100→    const t = setTimeout(() => {
+   101→      setDebouncedSearch(search)
+   102→      setPage(1)
+   103→    }, 350)
+   104→    return () => clearTimeout(t)
+   105→  }, [search])
+   106→
+   107→  // Build query string
+   108→  const queryString = useMemo(() => {
+   109→    const p = new URLSearchParams()
+   110→    p.set('page', String(page))
+   111→    p.set('limit', String(PAGE_SIZE))
+   112→    if (isStaff && debouncedSearch) p.set('search', debouncedSearch)
+   113→    if (isStaff && courseId !== 'all') p.set('courseId', courseId)
+   114→    if (isStaff && status !== 'all') p.set('status', status)
+   115→    return p.toString()
+   116→  }, [page, isStaff, debouncedSearch, courseId, status])
+   117→
+   118→  // Fetch certificates
+   119→  useEffect(() => {
+   120→    let cancelled = false
+   121→    Promise.resolve().then(() => {
+   122→      if (!cancelled) setLoading(true)
+   123→    })
+   124→    api
+   125→      .get<CertificatesResponse>(`/certificates?${queryString}`)
+   126→      .then((r) => {
+   127→        if (cancelled) return
+   128→        setCertificates(r.data ?? [])
+   129→        if (r.meta) setMeta({ total: r.meta.total, pages: r.meta.pages })
+   130→      })
+   131→      .catch((e) => {
+   132→        if (cancelled) return
+   133→        toast({
+   134→          title: t('common.error'),
+   135→          description: (e as Error).message || t('certificates.loadFailed'),
+   136→          variant: 'destructive',
+   137→        })
+   138→        setCertificates([])
+   139→      })
+   140→      .finally(() => {
+   141→        if (!cancelled) setLoading(false)
+   142→      })
+   143→    return () => {
+   144→      cancelled = true
+   145→    }
+   146→  }, [queryString, toast, t])
+   147→
+   148→  // Fetch course list for filter (staff only, once)
+   149→  useEffect(() => {
+   150→    if (!isStaff) return
+   151→    let cancelled = false
+   152→    api
+   153→      .get<{ status: string; data: Array<{ id: string; title: string }> }>(
+   154→        '/courses?limit=60&sort=title'
+   155→      )
+   156→      .then((r) => {
+   157→        if (cancelled) return
+   158→        setCourses(r.data ?? [])
+   159→      })
+   160→      .catch(() => {
+   161→        if (!cancelled) setCourses([])
+   162→      })
+   163→    return () => {
+   164→      cancelled = true
+   165→    }
+   166→  }, [isStaff])
+   167→
+   168→  const clearFilters = () => {
+   169→    setSearch('')
+   170→    setCourseId('all')
+   171→    setStatus('all')
+   172→    setPage(1)
+   173→  }
+   174→
+   175→  const hasActiveFilters =
+   176→    !!debouncedSearch || courseId !== 'all' || status !== 'all'
+   177→
+   178→  const handleAutoGenerate = useCallback(async () => {
+   179→    setAutoGenerating(true)
+   180→    try {
+   181→      const res = await api.post<AutoGenResponse>('/certificates/auto')
+   182→      toast({
+   183→        title: res.data.created > 0 ? t('certificates.certsCreated') : t('certificates.noNewCerts'),
+   184→        description: res.data.message,
+   185→        variant: res.data.created > 0 ? 'default' : 'default',
+   186→      })
+   187→      // Refresh list
+   188→      if (res.data.created > 0) {
+   189→        setPage(1)
+   190→        // Re-fetch by toggling queryString via state change
+   191→        setTimeout(() => {
+   192→          api
+   193→            .get<CertificatesResponse>(`/certificates?${queryString}`)
+   194→            .then((r) => {
+   195→              setCertificates(r.data ?? [])
+   196→              if (r.meta) setMeta({ total: r.meta.total, pages: r.meta.pages })
+   197→            })
+   198→            .catch(() => {})
+   199→        }, 200)
+   200→      }
+   201→    } catch (e) {
+   202→      toast({
+   203→        title: t('common.error'),
+   204→        description: e instanceof Error ? e.message : t('certificates.autoFailed'),
+   205→        variant: 'destructive',
+   206→      })
+   207→    } finally {
+   208→      setAutoGenerating(false)
+   209→    }
+   210→  }, [queryString, toast, t])
+   211→
+   212→  const handleRevoke = useCallback(async () => {
+   213→    const cert = revokeDialog.cert
+   214→    if (!cert) return
+   215→    setRevokingId(cert.id)
+   216→    try {
+   217→      await api.patch(`/certificates/${cert.id}`, { status: 'revoked' })
+   218→      // Update local state
+   219→      setCertificates((prev) =>
+   220→        prev.map((c) => (c.id === cert.id ? { ...c, status: 'revoked' } : c))
+   221→      )
+   222→      toast({
+   223→        title: t('certificates.revokedToast'),
+   224→        description: t('certificates.revokedToastDesc').replace('{certNumber}', cert.certNumber),
+   225→      })
+   226→    } catch (e) {
+   227→      toast({
+   228→        title: t('common.error'),
+   229→        description: e instanceof Error ? e.message : t('common.actionFailed'),
+   230→        variant: 'destructive',
+   231→      })
+   232→    } finally {
+   233→      setRevokingId(null)
+   234→      setRevokeDialog({ open: false, cert: null })
+   235→    }
+   236→  }, [revokeDialog.cert, toast, t])
+   237→
+   238→  const handleDownload = useCallback(
+   239→    (e: React.MouseEvent, cert: Certificate) => {
+   240→      e.stopPropagation()
+   241→      // Navigate to verify view and trigger print
+   242→      navigate('certificate-verify', { hash: cert.verifyHash, print: '1' })
+   243→    },
+   244→    [navigate]
+   245→  )
+   246→
+   247→  if (isStaff) {
+   248→    return (
+   249→      <StaffCertificatesView
+   250→        certificates={certificates}
+   251→        loading={loading}
+   252→        page={page}
+   253→        meta={meta}
+   254→        search={search}
+   255→        debouncedSearch={debouncedSearch}
+   256→        courseId={courseId}
+   257→        status={status}
+   258→        courses={courses}
+   259→        autoGenerating={autoGenerating}
+   260→        revokingId={revokingId}
+   261→        hasActiveFilters={hasActiveFilters}
+   262→        onSearchChange={setSearch}
+   263→        onCourseChange={(v) => {
+   264→          setCourseId(v)
+   265→          setPage(1)
+   266→        }}
+   267→        onStatusChange={(v) => {
+   268→          setStatus(v)
+   269→          setPage(1)
+   270→        }}
+   271→        onClearFilters={clearFilters}
+   272→        onPageChange={setPage}
+   273→        onAutoGenerate={handleAutoGenerate}
+   274→        onView={(c) => navigate('certificate-verify', { hash: c.verifyHash })}
+   275→        onDownload={(e, c) => handleDownload(e, c)}
+   276→        onRevoke={(c) => setRevokeDialog({ open: true, cert: c })}
+   277→        revokeDialog={revokeDialog}
+   278→        onRevokeClose={() => setRevokeDialog({ open: false, cert: null })}
+   279→        onRevokeConfirm={handleRevoke}
+   280→      />
+   281→    )
+   282→  }
+   283→
+   284→  return (
+   285→    <StudentCertificatesView
+   286→      certificates={certificates}
+   287→      loading={loading}
+   288→      page={page}
+   289→      meta={meta}
+   290→      onView={(c) => navigate('certificate-verify', { hash: c.verifyHash })}
+   291→      onDownload={(e, c) => handleDownload(e, c)}
+   292→      onPageChange={setPage}
+   293→    />
+   294→  )
+   295→}
+   296→
+   297→// ============== STUDENT VIEW ==============
+   298→
+   299→function StudentCertificatesView({
+   300→  certificates,
+   301→  loading,
+   302→  page,
+   303→  meta,
+   304→  onView,
+   305→  onDownload,
+   306→  onPageChange,
+   307→}: {
+   308→  certificates: Certificate[]
+   309→  loading: boolean
+   310→  page: number
+   311→  meta: { total: number; pages: number }
+   312→  onView: (cert: Certificate) => void
+   313→  onDownload: (e: React.MouseEvent, cert: Certificate) => void
+   314→  onPageChange: (page: number) => void
+   315→}) {
+   316→  const { t } = useTranslation()
+   317→  return (
+   318→    <div className="space-y-6">
+   319→      {/* Header */}
+   320→      <div>
+   321→        <h1 className="text-2xl font-bold flex items-center gap-2">
+   322→          <Award className="w-6 h-6 text-primary" />
+   323→          {t('certificates.myCerts')}
+   324→        </h1>
+   325→        <p className="text-muted-foreground text-sm mt-0.5">
+   326→          {t('certificates.myCertsDesc')}
+   327→        </p>
+   328→      </div>
+   329→
+   330→      {loading ? (
+   331→        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   332→          {Array.from({ length: 6 }).map((_, i) => (
+   333→            <Card key={i} className="overflow-hidden pt-0 gap-0">
+   334→              <Skeleton className="h-32 w-full rounded-none" />
+   335→              <CardContent className="p-4 space-y-3">
+   336→                <Skeleton className="h-4 w-2/3" />
+   337→                <Skeleton className="h-3 w-full" />
+   338→                <Skeleton className="h-8 w-full" />
+   339→              </CardContent>
+   340→            </Card>
+   341→          ))}
+   342→        </div>
+   343→      ) : certificates.length === 0 ? (
+   344→        <Card className="p-12">
+   345→          <div className="flex flex-col items-center text-center gap-4">
+   346→            <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+   347→              <Award className="w-10 h-10 text-primary/60" />
+   348→            </div>
+   349→            <div>
+   350→              <h3 className="font-semibold text-lg">{t('certificates.noCertsTitle')}</h3>
+   351→              <p className="text-sm text-muted-foreground mt-1 max-w-md">
+   352→                {t('certificates.noCertsDesc')}
+   353→              </p>
+   354→            </div>
+   355→            <Button variant="outline" onClick={() => useNav.getState().navigate('quizzes')}>
+   356→              {t('certificates.goToTests')}
+   357→            </Button>
+   358→          </div>
+   359→        </Card>
+   360→      ) : (
+   361→        <>
+   362→          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+   363→            {certificates.map((cert) => (
+   364→              <StudentCertCard
+   365→                key={cert.id}
+   366→                cert={cert}
+   367→                onView={() => onView(cert)}
+   368→                onDownload={(e) => onDownload(e, cert)}
+   369→              />
+   370→            ))}
+   371→          </div>
+   372→
+   373→          {!loading && meta.pages > 1 && (
+   374→            <Pagination page={page} pages={meta.pages} onPageChange={onPageChange} />
+   375→          )}
+   376→        </>
+   377→      )}
+   378→    </div>
+   379→  )
+   380→}
+   381→
+   382→function StudentCertCard({
+   383→  cert,
+   384→  onView,
+   385→  onDownload,
+   386→}: {
+   387→  cert: Certificate
+   388→  onView: () => void
+   389→  onDownload: (e: React.MouseEvent) => void
+   390→}) {
+   391→  const { t } = useTranslation()
+   392→  const primary = cert.template?.primaryColor ?? '#0f766e'
+   393→  const accent = cert.template?.accentColor ?? '#ca8a04'
+   394→  const studentName = useAuth((s) => s.user)
+   395→  const fullName = studentName
+   396→    ? `${studentName.lastName} ${studentName.firstName}`.trim()
+   397→    : ''
+   398→
+   399→  return (
+   400→    <Card
+   401→      className="overflow-hidden cursor-pointer hover:shadow-md transition-all hover:-translate-y-0.5 pt-0 gap-0 group"
+   402→      onClick={onView}
+   403→    >
+   404→      {/* Mini certificate preview header */}
+   405→      <div
+   406→        className="relative h-36 px-4 py-4 flex flex-col justify-between text-white"
+   407→        style={{
+   408→          background: `linear-gradient(135deg, ${primary} 0%, ${primary}dd 50%, ${primary}aa 100%)`,
+   409→        }}
+   410→      >
+   411→        {/* Decorative corner */}
+   412→        <div
+   413→          className="absolute top-0 right-0 w-24 h-24 opacity-20"
+   414→          style={{
+   415→            background: `radial-gradient(circle at top right, ${accent}, transparent 70%)`,
+   416→          }}
+   417→        />
+   418→        <div className="flex items-start justify-between relative">
+   419→          <div>
+   420→            <p className="text-[10px] uppercase tracking-widest opacity-80">{t('certificates.appName')}</p>
+   421→            <p className="text-xs font-medium opacity-90 mt-0.5">
+   422→              {cert.template?.titleText ?? t('certificates.certificate')}
+   423→            </p>
+   424→          </div>
+   425→          <Award className="w-7 h-7 opacity-80" style={{ color: accent }} />
+   426→        </div>
+   427→        <div className="relative">
+   428→          <p className="text-[11px] opacity-75 line-clamp-1">{fullName}</p>
+   429→          <p className="text-xs font-semibold line-clamp-1 leading-tight mt-0.5">
+   430→            {cert.course?.title ?? '—'}
+   431→          </p>
+   432→        </div>
+   433→        {/* Bottom border accent */}
+   434→        <div
+   435→          className="absolute bottom-0 left-0 right-0 h-1"
+   436→          style={{ background: accent }}
+   437→        />
+   438→      </div>
+   439→
+   440→      <CardContent className="p-4 space-y-3">
+   441→        <div className="flex items-center justify-between gap-2">
+   442→          <Badge
+   443→            variant="secondary"
+   444→            className="font-mono text-[10px] px-2 py-0.5"
+   445→          >
+   446→            <Hash className="w-3 h-3 mr-1" />
+   447→            {cert.certNumber}
+   448→          </Badge>
+   449→          <Badge
+   450→            className="text-[11px]"
+   451→            style={{
+   452→              background: `${primary}15`,
+   453→              color: primary,
+   454→              border: `1px solid ${primary}30`,
+   455→            }}
+   456→          >
+   457→            <TrendingUp className="w-3 h-3 mr-1" />
+   458→            {cert.percentage}%
+   459→          </Badge>
+   460→        </div>
+   461→
+   462→        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+   463→          <Calendar className="w-3.5 h-3.5" />
+   464→          <span>{formatDate(cert.issuedAt)}</span>
+   465→          <span className="mx-1">·</span>
+   466→          <span>
+   467→            {cert.score} / {cert.maxScore} {t('certificates.ball')}
+   468→          </span>
+   469→        </div>
+   470→      </CardContent>
+   471→
+   472→      <CardFooter className="p-4 pt-0 gap-2">
+   473→        <Button size="sm" variant="outline" className="flex-1" onClick={onView}>
+   474→          <Eye className="w-3.5 h-3.5" /> {t('common.view')}
+   475→        </Button>
+   476→        <Button size="sm" variant="ghost" onClick={onDownload} title={t('common.download')}>
+   477→          <Download className="w-3.5 h-3.5" />
+   478→        </Button>
+   479→      </CardFooter>
+   480→    </Card>
+   481→  )
+   482→}
+   483→
+   484→// ============== STAFF VIEW ==============
+   485→
+   486→function StaffCertificatesView({
+   487→  certificates,
+   488→  loading,
+   489→  page,
+   490→  meta,
+   491→  search,
+   492→  courseId,
+   493→  status,
+   494→  courses,
+   495→  autoGenerating,
+   496→  revokingId,
+   497→  hasActiveFilters,
+   498→  onSearchChange,
+   499→  onCourseChange,
+   500→  onStatusChange,
+   501→  onClearFilters,
+   502→  onPageChange,
+   503→  onAutoGenerate,
+   504→  onView,
+   505→  onDownload,
+   506→  onRevoke,
+   507→  revokeDialog,
+   508→  onRevokeClose,
+   509→  onRevokeConfirm,
+   510→}: {
+   511→  certificates: Certificate[]
+   512→  loading: boolean
+   513→  page: number
+   514→  meta: { total: number; pages: number }
+   515→  search: string
+   516→  courseId: string
+   517→  status: string
+   518→  courses: Array<{ id: string; title: string }>
+   519→  autoGenerating: boolean
+   520→  revokingId: string | null
+   521→  hasActiveFilters: boolean
+   522→  onSearchChange: (v: string) => void
+   523→  onCourseChange: (v: string) => void
+   524→  onStatusChange: (v: string) => void
+   525→  onClearFilters: () => void
+   526→  onPageChange: (page: number) => void
+   527→  onAutoGenerate: () => void
+   528→  onView: (cert: Certificate) => void
+   529→  onDownload: (e: React.MouseEvent, cert: Certificate) => void
+   530→  onRevoke: (cert: Certificate) => void
+   531→  revokeDialog: { open: boolean; cert: Certificate | null }
+   532→  onRevokeClose: () => void
+   533→  onRevokeConfirm: () => void
+   534→}) {
+   535→  const { t } = useTranslation()
+   536→  return (
+   537→    <div className="space-y-6">
+   538→      {/* Header */}
+   539→      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+   540→        <div>
+   541→          <h1 className="text-2xl font-bold flex items-center gap-2">
+   542→            <Award className="w-6 h-6 text-primary" />
+   543→            {t('certificates.registry')}
+   544→          </h1>
+   545→          <p className="text-muted-foreground text-sm mt-0.5">
+   546→            {t('certificates.registryDesc')}
+   547→          </p>
+   548→        </div>
+   549→        <Button onClick={onAutoGenerate} disabled={autoGenerating}>
+   550→          {autoGenerating ? (
+   551→            <Loader2 className="w-4 h-4 animate-spin" />
+   552→          ) : (
+   553→            <Sparkles className="w-4 h-4" />
+   554→          )}
+   555→          {t('certificates.autoGenerate')}
+   556→        </Button>
+   557→      </div>
+   558→
+   559→      {/* Filters */}
+   560→      <Card className="p-4">
+   561→        <div className="flex flex-col lg:flex-row gap-3">
+   562→          <div className="relative flex-1">
+   563→            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+   564→            <Input
+   565→              type="search"
+   566→              placeholder={t('certificates.searchPlaceholder')}
+   567→              value={search}
+   568→              onChange={(e) => onSearchChange(e.target.value)}
+   569→              className="pl-10"
+   570→            />
+   571→            {search && (
+   572→              <button
+   573→                onClick={() => onSearchChange('')}
+   574→                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-accent"
+   575→                aria-label={t('common.clearSearch')}
+   576→              >
+   577→                <X className="w-4 h-4" />
+   578→              </button>
+   579→            )}
+   580→          </div>
+   581→          <div className="flex flex-wrap gap-2">
+   582→            <Select value={courseId} onValueChange={onCourseChange}>
+   583→              <SelectTrigger className="w-[200px]">
+   584→                <SelectValue placeholder={t('certificates.course')} />
+   585→              </SelectTrigger>
+   586→              <SelectContent>
+   587→                <SelectItem value="all">{t('certificates.allCourses')}</SelectItem>
+   588→                {courses.map((c) => (
+   589→                  <SelectItem key={c.id} value={c.id}>
+   590→                    {c.title}
+   591→                  </SelectItem>
+   592→                ))}
+   593→              </SelectContent>
+   594→            </Select>
+   595→            <Select value={status} onValueChange={onStatusChange}>
+   596→              <SelectTrigger className="w-[150px]">
+   597→                <SelectValue placeholder={t('common.status')} />
+   598→              </SelectTrigger>
+   599→              <SelectContent>
+   600→                <SelectItem value="all">{t('common.allStatuses')}</SelectItem>
+   601→                <SelectItem value="active">{t('common.active')}</SelectItem>
+   602→                <SelectItem value="revoked">{t('common.revoked')}</SelectItem>
+   603→              </SelectContent>
+   604→            </Select>
+   605→            {hasActiveFilters && (
+   606→              <Button variant="ghost" onClick={onClearFilters} size="sm">
+   607→                <X className="w-4 h-4" /> {t('common.clear')}
+   608→              </Button>
+   609→            )}
+   610→          </div>
+   611→        </div>
+   612→        <div className="mt-3 text-xs text-muted-foreground">
+   613→          {loading
+   614→            ? t('common.loading')
+   615→            : t('certificates.resultsFound').replace('{total}', String(meta.total))}
+   616→        </div>
+   617→      </Card>
+   618→
+   619→      {/* Table */}
+   620→      {loading ? (
+   621→        <Card className="p-6">
+   622→          <div className="space-y-3">
+   623→            {Array.from({ length: 6 }).map((_, i) => (
+   624→              <Skeleton key={i} className="h-12 w-full" />
+   625→            ))}
+   626→          </div>
+   627→        </Card>
+   628→      ) : certificates.length === 0 ? (
+   629→        <Card className="p-12">
+   630→          <div className="flex flex-col items-center text-center gap-3">
+   631→            <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+   632→              <AlertCircle className="w-8 h-8 text-muted-foreground" />
+   633→            </div>
+   634→            <div>
+   635→              <h3 className="font-semibold text-lg">{t('certificates.noCertsFound')}</h3>
+   636→              <p className="text-sm text-muted-foreground mt-1">
+   637→                {hasActiveFilters
+   638→                  ? t('common.tryChangingFilters')
+   639→                  : t('certificates.noCertsYet')}
+   640→              </p>
+   641→            </div>
+   642→            {hasActiveFilters && (
+   643→              <Button variant="outline" onClick={onClearFilters}>
+   644→                {t('common.clearFilters')}
+   645→              </Button>
+   646→            )}
+   647→          </div>
+   648→        </Card>
+   649→      ) : (
+   650→        <Card className="overflow-hidden pt-0 gap-0">
+   651→          <Table>
+   652→            <TableHeader>
+   653→              <TableRow className="bg-muted/40 hover:bg-muted/40">
+   654→                <TableHead className="min-w-[140px]">{t('certificates.certNumber')}</TableHead>
+   655→                <TableHead className="min-w-[180px]">{t('certificates.student')}</TableHead>
+   656→                <TableHead className="min-w-[200px]">{t('certificates.course')}</TableHead>
+   657→                <TableHead className="min-w-[100px]">{t('certificates.score')}</TableHead>
+   658→                <TableHead className="min-w-[120px]">{t('certificates.issuedAt')}</TableHead>
+   659→                <TableHead className="min-w-[110px]">{t('common.status')}</TableHead>
+   660→                <TableHead className="text-right min-w-[140px]">{t('common.actions')}</TableHead>
+   661→              </TableRow>
+   662→            </TableHeader>
+   663→            <TableBody>
+   664→              {certificates.map((cert) => {
+   665→                const u = cert.user
+   666→                const fullName = u
+   667→                  ? `${u.lastName} ${u.firstName}${u.middleName ? ' ' + u.middleName : ''}`
+   668→                  : '—'
+   669→                const initials = u
+   670→                  ? `${u.firstName[0] ?? ''}${u.lastName[0] ?? ''}`.toUpperCase()
+   671→                  : '?'
+   672→                return (
+   673→                  <TableRow key={cert.id} className="hover:bg-muted/30">
+   674→                    <TableCell>
+   675→                      <span className="font-mono text-xs">{cert.certNumber}</span>
+   676→                    </TableCell>
+   677→                    <TableCell>
+   678→                      <div className="flex items-center gap-2 min-w-0">
+   679→                        <Avatar className="w-8 h-8 flex-shrink-0">
+   680→                          <AvatarFallback className="bg-primary/10 text-primary text-xs">
+   681→                            {initials}
+   682→                          </AvatarFallback>
+   683→                        </Avatar>
+   684→                        <span className="text-sm truncate">{fullName}</span>
+   685→                      </div>
+   686→                    </TableCell>
+   687→                    <TableCell className="text-sm">
+   688→                      <span className="line-clamp-1">{cert.course?.title ?? '—'}</span>
+   689→                    </TableCell>
+   690→                    <TableCell>
+   691→                      <Badge variant="outline" className="font-mono text-xs">
+   692→                        {cert.percentage}%
+   693→                      </Badge>
+   694→                      <div className="text-[10px] text-muted-foreground mt-0.5">
+   695→                        {cert.score}/{cert.maxScore}
+   696→                      </div>
+   697→                    </TableCell>
+   698→                    <TableCell className="text-xs text-muted-foreground">
+   699→                      {formatDate(cert.issuedAt)}
+   700→                    </TableCell>
+   701→                    <TableCell>
+   702→                      <StatusBadge status={cert.status} />
+   703→                    </TableCell>
+   704→                    <TableCell className="text-right">
+   705→                      <div className="flex items-center justify-end gap-1">
+   706→                        <Button
+   707→                          size="sm"
+   708→                          variant="ghost"
+   709→                          onClick={() => onView(cert)}
+   710→                          title={t('common.view')}
+   711→                        >
+   712→                          <Eye className="w-4 h-4" />
+   713→                        </Button>
+   714→                        <Button
+   715→                          size="sm"
+   716→                          variant="ghost"
+   717→                          onClick={(e) => onDownload(e, cert)}
+   718→                          title={t('common.download')}
+   719→                        >
+   720→                          <Download className="w-4 h-4" />
+   721→                        </Button>
+   722→                        {cert.status === 'active' && (
+   723→                          <Button
+   724→                            size="sm"
+   725→                            variant="ghost"
+   726→                            onClick={() => onRevoke(cert)}
+   727→                            disabled={revokingId === cert.id}
+   728→                            title={t('certificates.revoke')}
+   729→                            className="text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+   730→                          >
+   731→                            {revokingId === cert.id ? (
+   732→                              <Loader2 className="w-4 h-4 animate-spin" />
+   733→                            ) : (
+   734→                              <ShieldAlert className="w-4 h-4" />
+   735→                            )}
+   736→                          </Button>
+   737→                        )}
+   738→                      </div>
+   739→                    </TableCell>
+   740→                  </TableRow>
+   741→                )
+   742→              })}
+   743→            </TableBody>
+   744→          </Table>
+   745→        </Card>
+   746→      )}
+   747→
+   748→      {!loading && meta.pages > 1 && (
+   749→        <Pagination page={page} pages={meta.pages} onPageChange={onPageChange} />
+   750→      )}
+   751→
+   752→      {/* Revoke confirmation dialog */}
+   753→      <Dialog open={revokeDialog.open} onOpenChange={(o) => !o && onRevokeClose()}>
+   754→        <DialogContent>
+   755→          <DialogHeader>
+   756→            <DialogTitle className="flex items-center gap-2">
+   757→              <ShieldAlert className="w-5 h-5 text-rose-600" />
+   758→              {t('certificates.revokeTitle')}
+   759→            </DialogTitle>
+   760→            <DialogDescription>
+   761→              {revokeDialog.cert && (
+   762→                <>
+   763→                  {t('certificates.revokeWarning').replace('{certNumber}', revokeDialog.cert.certNumber)}
+   764→                </>
+   765→              )}
+   766→            </DialogDescription>
+   767→          </DialogHeader>
+   768→          <DialogFooter>
+   769→            <Button variant="outline" onClick={onRevokeClose}>
+   770→              {t('common.cancel')}
+   771→            </Button>
+   772→            <Button variant="destructive" onClick={onRevokeConfirm}>
+   773→              {t('common.confirm')}
+   774→            </Button>
+   775→          </DialogFooter>
+   776→        </DialogContent>
+   777→      </Dialog>
+   778→    </div>
+   779→  )
+   780→}
+   781→
+   782→// ============== SHARED COMPONENTS ==============
+   783→
+   784→function StatusBadge({ status }: { status: string }) {
+   785→  const { t } = useTranslation()
+   786→  if (status === 'active') {
+   787→    return (
+   788→      <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100">
+   789→        <ShieldCheck className="w-3 h-3 mr-1" />
+   790→        {t('common.active')}
+   791→      </Badge>
+   792→    )
+   793→  }
+   794→  if (status === 'revoked') {
+   795→    return (
+   796→      <Badge className="bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400 border-rose-200 dark:border-rose-800 hover:bg-rose-100">
+   797→        <ShieldAlert className="w-3 h-3 mr-1" />
+   798→        {t('common.revoked')}
+   799→      </Badge>
+   800→    )
+   801→  }
+   802→  return <Badge variant="secondary">{status}</Badge>
+   803→}
+   804→
+   805→function Pagination({
+   806→  page,
+   807→  pages,
+   808→  onPageChange,
+   809→}: {
+   810→  page: number
+   811→  pages: number
+   812→  onPageChange: (page: number) => void
+   813→}) {
+   814→  const { t } = useTranslation()
+   815→  return (
+   816→    <div className="flex items-center justify-center gap-2 pt-2">
+   817→      <Button
+   818→        variant="outline"
+   819→        size="sm"
+   820→        disabled={page === 1}
+   821→        onClick={() => onPageChange(Math.max(1, page - 1))}
+   822→      >
+   823→        <ChevronLeft className="w-4 h-4" />
+   824→        {t('common.prev')}
+   825→      </Button>
+   826→      <div className="flex items-center gap-1">
+   827→        {Array.from({ length: Math.min(5, pages) }).map((_, i) => {
+   828→          const startPage = Math.max(1, Math.min(page - 2, pages - 4))
+   829→          const pageNum = startPage + i
+   830→          if (pageNum > pages) return null
+   831→          return (
+   832→            <Button
+   833→              key={pageNum}
+   834→              variant={page === pageNum ? 'default' : 'outline'}
+   835→              size="sm"
+   836→              className="w-9 h-9 p-0"
+   837→              onClick={() => onPageChange(pageNum)}
+   838→            >
+   839→              {pageNum}
+   840→            </Button>
+   841→          )
+   842→        })}
+   843→      </div>
+   844→      <Button
+   845→        variant="outline"
+   846→        size="sm"
+   847→        disabled={page >= pages}
+   848→        onClick={() => onPageChange(Math.min(pages, page + 1))}
+   849→      >
+   850→        {t('common.next')}
+   851→        <ChevronRight className="w-4 h-4" />
+   852→      </Button>
+   853→    </div>
+   854→  )
+   855→}
+   856→
