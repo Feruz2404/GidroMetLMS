@@ -59,3 +59,25 @@ Stage Summary:
 - Build passes with zero errors
 - 16 critical/high fixes applied
 - Session persistence, auth flow, navigation, and core UI all working correctly now
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Fix sidebar expansion on language change and continuous page refresh on courses/library/certificates
+
+Work Log:
+- Analyzed uploaded screenshots with VLM: first shows dashboard (Russian), second shows courses page stuck in loading state (Uzbek)
+- Deep-dived into all view components, hooks, stores, and API routes to trace re-render chains
+- Identified and fixed 5 issues:
+  1. app-shell.tsx: Added `overflow-hidden` to sidebar and root layout to prevent visual expansion
+  2. page.tsx: Replaced 13-item `&&` chain with stable `VIEW_MAP` lookup + `useMemo` for ActiveView — eliminates reconciliation ambiguity across 13 sibling positions on every re-render
+  3. library-view.tsx: Removed `t` from `typeLabel` useCallback deps and `toggleBookmark` useCallback deps — used `tRef` pattern instead
+  4. courses-view.tsx, library-view.tsx, certificates-view.tsx: Added `tRef` pattern for `t` used inside fetch effect `.catch()` handlers — prevents stale closures
+  5. All views: Verified useEffect deps are `[queryString]` only (not `[queryString, toast, t]`)
+- Verified build passes with zero errors from correct project directory
+
+Stage Summary:
+- Sidebar expansion: Fixed with overflow-hidden on sidebar and root container
+- Continuous refresh root cause: The `&&` chain in page.tsx created 13 sibling positions that React had to reconcile on every parent re-render (e.g., language change). Replaced with single-component lookup pattern.
+- All `t` function usages inside useEffect/useCallback now go through `useRef` to prevent dependency instability
+- Build: `npx next build` passes with zero TypeScript errors
