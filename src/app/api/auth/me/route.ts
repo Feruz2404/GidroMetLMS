@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
+import { db, getPrismaErrorDetails } from '@/lib/db'
 import { getCurrentUser, ok, err, requireAuth, readJson } from '@/lib/auth'
 
 // GET /api/auth/me — current user profile
@@ -27,7 +27,14 @@ export async function GET(req: NextRequest) {
     if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
       return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
     }
-    console.error('me GET error:', e)
+
+    const { code, message, isConnectionIssue } = getPrismaErrorDetails(e)
+    if (isConnectionIssue) {
+      console.error('me GET database error:', { code, message })
+      return err(503, 'Profil ma\'lumotlari vaqtincha mavjud emas. Iltimos, bir ozdan keyin qayta urinib ko\'ring.')
+    }
+
+    console.error('me GET error:', { error: e, code, message })
     return err(500, 'Server xatosi')
   }
 }
@@ -77,7 +84,14 @@ export async function PATCH(req: NextRequest) {
     if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
       return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
     }
-    console.error('me PATCH error:', e)
+
+    const { code, message, isConnectionIssue } = getPrismaErrorDetails(e)
+    if (isConnectionIssue) {
+      console.error('me PATCH database error:', { code, message })
+      return err(503, 'Profil yangilash xizmati vaqtincha mavjud emas. Iltimos, bir ozdan keyin qayta urinib ko\'ring.')
+    }
+
+    console.error('me PATCH error:', { error: e, code, message })
     return err(500, 'Server xatosi')
   }
 }

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
+import { db, getPrismaErrorDetails } from '@/lib/db'
 import {
   createSession,
   destroySession,
@@ -71,7 +71,14 @@ export async function POST(req: NextRequest) {
     if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
       return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
     }
-    console.error('Login error:', e)
+
+    const { code, message, isConnectionIssue } = getPrismaErrorDetails(e)
+    if (isConnectionIssue) {
+      console.error('Login database error:', { code, message })
+      return err(503, 'Autentifikatsiya xizmati vaqtincha mavjud emas. Iltimos, bir ozdan keyin qayta urinib ko\'ring.')
+    }
+
+    console.error('Login error:', { error: e, code, message })
     return err(500, 'Server xatosi')
   }
 }
@@ -94,7 +101,14 @@ export async function DELETE(req: NextRequest) {
     if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
       return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
     }
-    console.error('Logout error:', e)
+
+    const { code, message, isConnectionIssue } = getPrismaErrorDetails(e)
+    if (isConnectionIssue) {
+      console.error('Logout database error:', { code, message })
+      return err(503, 'Autentifikatsiya xizmati vaqtincha mavjud emas. Iltimos, bir ozdan keyin qayta urinib ko\'ring.')
+    }
+
+    console.error('Logout error:', { error: e, code, message })
     return err(500, 'Server xatosi')
   }
 }

@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
+import { db, getPrismaErrorDetails } from '@/lib/db'
 import {
   createSession,
   hashPassword,
@@ -94,7 +94,14 @@ export async function POST(req: NextRequest) {
     if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
       return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
     }
-    console.error('Register error:', e)
+
+    const { code, message, isConnectionIssue } = getPrismaErrorDetails(e)
+    if (isConnectionIssue) {
+      console.error('Register database error:', { code, message })
+      return err(503, 'Ro\'yxatdan o\'tish xizmati vaqtincha mavjud emas. Iltimos, bir ozdan keyin qayta urinib ko\'ring.')
+    }
+
+    console.error('Register error:', { error: e, code, message })
     return err(500, 'Server xatosi')
   }
 }
