@@ -182,7 +182,7 @@ export function LoginView() {
               {/* Demo note */}
               <div className="mt-6 pt-6 border-t border-border">
                 <p className="text-xs text-muted-foreground text-center">
-                  Demo hisoblar administrator orqali beriladi
+                  {t('auth.demoAccountsNotice')}
                 </p>
               </div>
             </CardContent>

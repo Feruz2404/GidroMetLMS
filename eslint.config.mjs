@@ -13,7 +13,7 @@ const eslintConfig = [
       // Ban TS comments that suppress real errors
       "@typescript-eslint/ban-ts-comment": "warn",
       // Warn on unused vars (not error, to avoid blocking dev)
-      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_" }],
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       // React hooks deps — warn but don't block
       "react-hooks/exhaustive-deps": "warn",
       // No unescaped entities in JSX
@@ -33,11 +33,9 @@ const eslintConfig = [
       "out/**",
       "build/**",
       "next-env.d.ts",
-      "examples/**",
-      "skills/**",
       "prisma/seed.ts",
-      "meteo-lms-source/**",
-      "tool-results/**",
+      // Node CommonJS build tooling — not part of the app/TS graph
+      "scripts/**",
     ],
   },
 ];

@@ -5,7 +5,7 @@
 'use client'
 
 import { create } from 'zustand'
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 
 export type Language = 'uz' | 'ru' | 'en'
 
@@ -32,6 +32,7 @@ const uz: Dict = {
   'auth.loginButton': 'Kirish',
   'auth.loginSubtitle': 'Davom etish uchun hisob ma\'lumotlaringizni kiriting',
   'auth.demoAccounts': 'Demo hisoblar — tezkor kirish',
+  'auth.demoAccountsNotice': 'Demo hisoblar administrator orqali beriladi',
   'auth.invalidCredentials': 'Email yoki parol noto\'g\'ri',
   'auth.accountBlocked': 'Hisobingiz bloklangan. Administratorga murojaat qiling.',
   'auth.fieldsRequired': 'Email va parol majburiy',
@@ -744,6 +745,7 @@ const ru: Dict = {
   'auth.loginButton': 'Войти',
   'auth.loginSubtitle': 'Введите данные вашей учётной записи',
   'auth.demoAccounts': 'Демо-аккаунты — быстрый вход',
+  'auth.demoAccountsNotice': 'Демо-аккаунты предоставляются администратором',
   'auth.invalidCredentials': 'Неверный email или пароль',
   'auth.accountBlocked': 'Ваша учётная запись заблокирована. Обратитесь к администратору.',
   'auth.fieldsRequired': 'Email и пароль обязательны',
@@ -1441,6 +1443,7 @@ const en: Dict = {
   'auth.loginButton': 'Sign In',
   'auth.loginSubtitle': 'Enter your account credentials to continue',
   'auth.demoAccounts': 'Demo accounts — quick login',
+  'auth.demoAccountsNotice': 'Demo accounts are provided by the administrator',
   'auth.invalidCredentials': 'Invalid email or password',
   'auth.accountBlocked': 'Your account is blocked. Contact the administrator.',
   'auth.fieldsRequired': 'Email and password are required',
@@ -2156,10 +2159,17 @@ export const useLanguage = create<LanguageState>((set) => ({
 export function useTranslation() {
   const lang = useLanguage((s) => s.lang)
 
-  const t = (key: string): string => {
-    const dict = dictionaries[lang] || dictionaries.uz
-    return dict[key] ?? dictionaries.uz[key] ?? key
-  }
+  // Memoized so `t` keeps a stable identity across renders (only changing when
+  // the language changes). This prevents `t` from destabilizing the
+  // useCallback/useEffect dependency arrays that consume it — the root cause of
+  // several historical infinite-refetch loops.
+  const t = useCallback(
+    (key: string): string => {
+      const dict = dictionaries[lang] || dictionaries.uz
+      return dict[key] ?? dictionaries.uz[key] ?? key
+    },
+    [lang]
+  )
 
   return { t, lang }
 }
@@ -2167,9 +2177,18 @@ export function useTranslation() {
 // Initialize language on client mount
 export function useInitLanguage() {
   const initLang = useLanguage((s) => s.initLang)
+  const lang = useLanguage((s) => s.lang)
+
   useEffect(() => {
     initLang()
   }, [initLang])
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = lang
+      document.documentElement.dir = 'ltr'
+    }
+  }, [lang])
 }
 
 // Language labels for the switcher

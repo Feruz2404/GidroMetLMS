@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { api } from '@/lib/api'
 import { useNav } from '@/store/auth'
 import { Button } from '@/components/ui/button'
@@ -323,15 +323,26 @@ export function QuizTakingView() {
     [attemptId, questions, answers, toast, t]
   )
 
-  // Mount: kick off based on mode
+  // Mount: kick off based on mode. Guarded so it runs exactly once per
+  // quiz+mode — never on every render and never on a language switch — which
+  // would otherwise restart the attempt (and re-issue POST /attempt) because
+  // startAttempt/fetchReview change identity when the language changes.
+  const initedKeyRef = useRef<string | null>(null)
   useEffect(() => {
+    if (!quizId) return
+    const key = `${quizId}:${isReviewMode ? 'review' : 'take'}`
+    if (initedKeyRef.current === key) return
+    initedKeyRef.current = key
     // Defer state updates via microtask to avoid synchronous setState in effect body
     if (isReviewMode) {
       Promise.resolve().then(() => fetchReview())
     } else {
       Promise.resolve().then(() => startAttempt())
     }
-  }, [isReviewMode, startAttempt, fetchReview])
+    // Intentionally keyed on quizId/mode only; the callbacks are excluded so a
+    // re-created `startAttempt`/`fetchReview` cannot re-trigger initialization.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizId, isReviewMode])
 
   // Timer tick
   useEffect(() => {
@@ -492,7 +503,7 @@ export function QuizTakingView() {
           <div className="min-w-0 flex-1">
             <h2 className="font-semibold truncate flex items-center gap-2">
               <FileQuestion className="w-4 h-4 text-primary shrink-0" />
-              <span className="truncate">{quizInfo.title}</span>
+              <span className="truncate min-w-0">{quizInfo.title}</span>
             </h2>
             <p className="text-xs text-muted-foreground mt-0.5">
               {answeredCount} / {questions.length} {t('quizzes.questionsAnswered')}

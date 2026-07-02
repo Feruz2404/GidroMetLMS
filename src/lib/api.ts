@@ -57,8 +57,11 @@ async function request<T>(
     'Content-Type': 'application/json',
     ...(options.headers as Record<string, string>),
   }
-  // Attach Bearer token if available (skip for login endpoint itself)
-  if (token && !endpoint.startsWith('/auth')) {
+
+  const isPublicAuthLogin = endpoint === '/auth' && (options.method === 'POST' || options.method === undefined)
+  // Attach Bearer token if available, but skip the public login endpoint.
+  // /auth/me and /auth logout should still receive the token.
+  if (token && !isPublicAuthLogin && !endpoint.startsWith('/auth/register')) {
     headers['Authorization'] = `Bearer ${token}`
   }
 

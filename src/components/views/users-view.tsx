@@ -101,9 +101,9 @@ export function UsersView() {
       if (roleFilter !== 'all') params.set('role', roleFilter)
       if (statusFilter !== 'all') params.set('status', statusFilter)
       const res = await api.get<{ data: { users: UserRow[]; total: number; pages: number } }>(`/users?${params}`)
-      setUsers(res.data.users)
-      setTotal(res.data.total)
-      setPages(res.data.pages)
+      setUsers(res.data.users ?? [])
+      setTotal(res.data.total ?? 0)
+      setPages(res.data.pages ?? 1)
     } catch {
       toast({ title: t('common.error'), description: t('users.loadFailed'), variant: 'destructive' })
     } finally {
@@ -114,6 +114,9 @@ export function UsersView() {
   useEffect(() => {
     const t = setTimeout(fetchUsers, 300)
     return () => clearTimeout(t)
+    // Debounced refetch driven only by filter/page changes; `fetchUsers` is
+    // intentionally excluded to avoid re-running on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search, roleFilter, statusFilter, page])
 
   const toggleStatus = async (u: UserRow) => {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
+import { useAuth } from '@/store/auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -49,6 +50,7 @@ type ReportType = 'overview' | 'students' | 'courses' | 'quiz-results' | 'certif
 
 export function ReportsView() {
   const { t } = useTranslation()
+  const isAdmin = useAuth((s) => s.user?.role === 'admin')
   const [tab, setTab] = useState<ReportType>('overview')
   const [data, setData] = useState<Record<string, unknown>>({})
   const [loading, setLoading] = useState(true)
@@ -100,7 +102,10 @@ export function ReportsView() {
           <TabsTrigger value="quiz-results"><FileQuestion className="w-4 h-4 mr-1" /> {t('reports.tab.quizResults')}</TabsTrigger>
           <TabsTrigger value="certificates"><Award className="w-4 h-4 mr-1" /> {t('reports.tab.certificates')}</TabsTrigger>
           <TabsTrigger value="library-usage"><Library className="w-4 h-4 mr-1" /> {t('reports.tab.library')}</TabsTrigger>
-          <TabsTrigger value="audit-log"><Activity className="w-4 h-4 mr-1" /> {t('reports.tab.auditLog')}</TabsTrigger>
+          {/* Audit log (user actions + IP addresses) is admin-only, matching the API. */}
+          {isAdmin && (
+            <TabsTrigger value="audit-log"><Activity className="w-4 h-4 mr-1" /> {t('reports.tab.auditLog')}</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="mt-4">
@@ -126,9 +131,11 @@ export function ReportsView() {
         <TabsContent value="library-usage" className="mt-4">
           {loading ? <Loading /> : <LibraryUsageReport data={data} />}
         </TabsContent>
-        <TabsContent value="audit-log" className="mt-4">
-          {loading ? <Loading /> : <AuditLogReport data={data} />}
-        </TabsContent>
+        {isAdmin && (
+          <TabsContent value="audit-log" className="mt-4">
+            {loading ? <Loading /> : <AuditLogReport data={data} />}
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   )

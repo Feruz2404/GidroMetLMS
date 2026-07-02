@@ -159,7 +159,8 @@ export function LibraryView() {
     return () => {
       cancelled = true
     }
-  }, [queryString, toast, category, year, debouncedSearch, bookmarksOnly, type, page, t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryString])
 
   const toggleBookmark = useCallback(
     async (e: React.MouseEvent, resourceId: string, currentState: boolean) => {
@@ -539,7 +540,7 @@ function ResourceCard({
         {/* Author / year */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {resource.author && (
-            <span className="truncate flex-1">{resource.author}</span>
+            <span className="truncate flex-1 min-w-0">{resource.author}</span>
           )}
           {resource.year && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">

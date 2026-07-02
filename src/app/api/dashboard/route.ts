@@ -100,7 +100,7 @@ export async function GET(req: NextRequest) {
       const courseIds = courses.map((c) => c.id)
       const enrollments = await db.enrollment.findMany({
         where: { courseId: { in: courseIds } },
-        select: { id: true, progress: true, status: true, startedAt: true },
+        select: { id: true, userId: true, progress: true, status: true, startedAt: true },
       })
 
       const attempts = await db.quizAttempt.findMany({
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
         role: 'tutor',
         stats: {
           courses: courses.length,
-          students: new Set(enrollments.map((e) => e.id)).size,
+          students: new Set(enrollments.map((e) => e.userId)).size,
           totalEnrollments: enrollments.length,
           attempts: attempts.length,
           passed,

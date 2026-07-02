@@ -36,7 +36,7 @@ export default function Home() {
     if (!useAuth.getState().initialized) {
       fetchUser()
     }
-  }, [])
+  }, [fetchUser])
 
   // Role-based view guard
   useEffect(() => {

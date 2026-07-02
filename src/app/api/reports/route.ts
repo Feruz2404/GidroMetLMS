@@ -212,6 +212,8 @@ export async function GET(req: NextRequest) {
     }
 
     if (type === 'audit-log') {
+      // The audit log exposes every user's actions and IP addresses — admin only.
+      if (user.role !== 'admin') return err(403, 'Ruxsat yo\'q')
       const logs = await db.activityLog.findMany({
         include: { user: { select: { firstName: true, lastName: true, email: true, role: true } } },
         orderBy: { createdAt: 'desc' },

@@ -163,9 +163,6 @@ export async function POST(
       include: { options: true },
     })
 
-    // Build a map for quick lookup
-    const qMap = new Map(questions.map((q) => [q.id, q]))
-
     // Build submitted answer map (questionId → answer)
     const submittedMap = new Map<string, { selectedOptions: string[]; textAnswer: string | null }>()
     for (const a of answersInput) {

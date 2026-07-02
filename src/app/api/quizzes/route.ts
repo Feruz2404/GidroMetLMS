@@ -13,8 +13,8 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search')?.trim() ?? ''
     const courseId = searchParams.get('courseId') ?? ''
     const status = searchParams.get('status') ?? ''
-    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
-    const limit = Math.min(60, Math.max(1, parseInt(searchParams.get('limit') ?? '12', 10)))
+    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
+    const limit = Math.min(60, Math.max(1, parseInt(searchParams.get('limit') ?? '12', 10) || 12))
 
     // Build where clause based on role
     // Students: only published quizzes
@@ -46,10 +46,10 @@ export async function GET(req: NextRequest) {
     }
 
     const [total, quizzes] = await Promise.all([
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       db.quiz.count({ where: where as any }),
       db.quiz.findMany({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         where: where as any,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,

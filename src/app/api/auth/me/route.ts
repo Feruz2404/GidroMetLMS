@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { getCurrentUser, ok, err, requireAuth } from '@/lib/auth'
+import { getCurrentUser, ok, err, requireAuth, readJson } from '@/lib/auth'
 
 // GET /api/auth/me — current user profile
 export async function GET(req: NextRequest) {
@@ -36,7 +36,15 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const user = await requireAuth(req)
-    const body = await req.json()
+    const body = await readJson<{
+      firstName?: string
+      lastName?: string
+      middleName?: string | null
+      phone?: string | null
+      department?: string | null
+      position?: string | null
+      avatarUrl?: string | null
+    }>(req)
     const { firstName, lastName, middleName, phone, department, position, avatarUrl } = body
 
     const updated = await db.user.update({

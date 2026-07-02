@@ -143,7 +143,8 @@ export function CertificatesView() {
     return () => {
       cancelled = true
     }
-  }, [queryString, toast, t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryString])
 
   // Fetch course list for filter (staff only, once)
   useEffect(() => {
@@ -252,7 +253,6 @@ export function CertificatesView() {
         page={page}
         meta={meta}
         search={search}
-        debouncedSearch={debouncedSearch}
         courseId={courseId}
         status={status}
         courses={courses}
@@ -681,7 +681,7 @@ function StaffCertificatesView({
                             {initials}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-sm truncate">{fullName}</span>
+                        <span className="text-sm truncate min-w-0">{fullName}</span>
                       </div>
                     </TableCell>
                     <TableCell className="text-sm">

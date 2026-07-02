@@ -141,6 +141,20 @@ export function getClientIp(request: Request): string {
   return 'unknown'
 }
 
+/**
+ * Safely parse a JSON request body. Returns `{}` for an empty or malformed
+ * body instead of throwing, so routes surface their own field-validation
+ * errors (400) rather than a generic 500 from an unparsable body.
+ */
+export async function readJson<T = Record<string, unknown>>(req: Request): Promise<T> {
+  try {
+    const body = await req.json()
+    return (body ?? {}) as T
+  } catch {
+    return {} as T
+  }
+}
+
 // Standard API response helpers
 export function ok<T>(data: T, meta?: Record<string, unknown>) {
   return Response.json({ status: 'success', data, ...(meta ? { meta } : {}) })

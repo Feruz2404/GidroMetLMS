@@ -7,7 +7,7 @@ import {
   formatDate,
   type LibraryResource,
 } from '@/lib/api'
-import { useAuth, useNav } from '@/store/auth'
+import { useNav } from '@/store/auth'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -76,7 +76,6 @@ function ResourceTypeIcon({ type, className }: { type: string; className?: strin
 }
 
 export function LibraryDetailView() {
-  const user = useAuth((s) => s.user)!
   const navigate = useNav((s) => s.navigate)
   const params = useNav((s) => s.params)
   const id = params.id
@@ -125,7 +124,8 @@ export function LibraryDetailView() {
     return () => {
       cancelled = true
     }
-  }, [id, toast, t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
 
   // Fetch related resources (same category, take 4, exclude current)
   useEffect(() => {

@@ -81,3 +81,37 @@ Stage Summary:
 - Continuous refresh root cause: The `&&` chain in page.tsx created 13 sibling positions that React had to reconcile on every parent re-render (e.g., language change). Replaced with single-component lookup pattern.
 - All `t` function usages inside useEffect/useCallback now go through `useRef` to prevent dependency instability
 - Build: `npx next build` passes with zero TypeScript errors
+
+---
+Task ID: (audit) 2026-07-01
+Agent: Main Agent
+Task: Full production-readiness audit — install, lint, typecheck, build, dev, standalone start; API/auth/DB + UI/i18n review
+
+Baseline established:
+- Clean `npm install`; added missing `typecheck` script (`tsc --noEmit`)
+- tsc: 0 errors. eslint: was 2 errors + 25 warnings → now 0 errors + 6 (documented `<img>`) warnings
+- `next build` (standalone) passes; standalone `node .next/standalone/server.js` boots and serves; `next dev` boots and serves
+- DB seeded and queryable (admin/tutor/student); full auth flow + role-based 401/403 verified at runtime
+
+Security / correctness fixes (verified at runtime):
+1. auth/register: honored client `role` → anyone could self-grant `tutor` via direct API call. Now always creates `student` (UI only ever offered student).
+2. reports `audit-log` (all users' actions + IP addresses) was available to any tutor → now admin-only (server + hidden tab in reports-view). Combined with #1 this closes an unauthenticated→tutor→audit-log/PII path.
+3. i18n `useTranslation` now memoizes `t` (useCallback[lang]) — root cause of the quiz-taking infinite `POST /attempt` loop. quiz-taking mount effect additionally guarded by a quizId/mode-keyed ref so it inits once (no restart on language switch).
+4. certificates/auto: dedup set now updated inside the creation loop → no duplicate certificate when a user has multiple eligible attempts for the same course.
+5. courses list: search is now AND-combined with the visibility clause (was merged into the tutor OR, making search a no-op for tutors).
+6. dashboard tutor "students" stat now counts distinct userId (was counting enrollment PKs = always == enrollment count).
+7. Pagination hardened against NaN (`?page=abc` → 500) in courses/certificates/library/quizzes.
+8. Malformed/empty JSON body → 400 (was 500) on public/auth routes via new `readJson` helper (auth, register, me).
+
+UI robustness fixes:
+- dashboard-view: added error+retry state (previously showed loading skeletons forever on fetch error).
+- notifications-view: navigation guarded to known view names (a stray link no longer blanks the page); array fallbacks added.
+- courses-view/users-view: `?? []`/`?? 0` fallbacks on list setters; QuizCard progress guarded against maxAttempts=0.
+
+Cleanup:
+- Removed `tool-results/` (AI tool-output logs) and `examples/` (disabled scaffold); tidied stale eslint ignore entries.
+
+Known limitations (documented, not changed):
+- SQLite (`file:../db/custom.db`) fits a persistent Node host (verified via `npm start`), NOT Vercel serverless (read-only/ephemeral FS). `vercel.json` is present but the real target is a Node server; a hosted DB (Postgres/Turso) is required for Vercel.
+- Unused deps `next-intl`, `z-ai-web-dev-sdk` and z.ai platform scaffolding (`.zscripts/`, `Caddyfile`, `mini-services/`, `bun.lock`) left in place to avoid breaking the platform deploy pipeline.
+- Password hashing is PBKDF2 (demo); TZ specifies Argon2id. Reports `students`/`certificates` are not scoped to a tutor's own courses.

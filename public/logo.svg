@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <!-- Water drop / hydro theme -->
+  <defs>
+    <linearGradient id="hydro" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0d9488"/>
+      <stop offset="100%" stop-color="#0f766e"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#5eead4"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+  </defs>
+  <!-- Circle background -->
+  <circle cx="24" cy="24" r="22" fill="url(#hydro)"/>
+  <!-- Drop shape -->
+  <path d="M24 8 C24 8 14 20 14 27 C14 32.5 18.5 37 24 37 C29.5 37 34 32.5 34 27 C34 20 24 8 24 8Z" fill="white" opacity="0.95"/>
+  <!-- Wave inside drop -->
+  <path d="M17 28 Q20.5 25 24 28 Q27.5 31 31 28" stroke="url(#wave)" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Small wave -->
+  <path d="M19 31 Q21.5 29 24 31 Q26.5 33 29 31" stroke="url(#wave)" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+</svg>

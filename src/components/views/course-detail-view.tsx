@@ -156,7 +156,8 @@ export function CourseDetailView() {
     return () => {
       cancelled = true
     }
-  }, [courseId, toast, t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId])
 
   const isEnrolled = !!course?.enrollment
   const isOwner = user.role === 'admin' || (user.role === 'tutor' && course?.tutor?.id === user.id)
@@ -437,7 +438,6 @@ export function CourseDetailView() {
               isEnrolled={isEnrolled || isOwner}
               courseId={course.id}
               onMarkComplete={() => handleMarkComplete(selectedLesson.id)}
-              onProgress={updateLessonInState}
             />
           ) : (
             <Card className="p-8">
@@ -576,7 +576,7 @@ function LessonListItem({
 
       <LessonTypeIcon type={lesson.type} className={cn('w-3.5 h-3.5 flex-shrink-0', active && 'text-primary')} />
 
-      <span className="flex-1 truncate text-xs">{lesson.title}</span>
+      <span className="flex-1 truncate text-xs min-w-0">{lesson.title}</span>
       <span className="text-[10px] text-muted-foreground flex-shrink-0">
         {formatDuration(lesson.durationMin, t)}
       </span>
@@ -589,16 +589,13 @@ function LessonViewer({
   isEnrolled,
   courseId,
   onMarkComplete,
-  onProgress,
 }: {
   lesson: LessonWithLock
   isEnrolled: boolean
   courseId: string
   onMarkComplete: () => void
-  onProgress: (lessonId: string, updater: (l: LessonWithLock) => LessonWithLock) => void
 }) {
   const { t } = useTranslation()
-  const { toast } = useToast()
   const videoRef = useRef<HTMLVideoElement>(null)
   const lastSaveRef = useRef<number>(0)
   const watchTimeRef = useRef<number>(lesson.progress?.watchTimeSec ?? 0)
@@ -661,6 +658,8 @@ function LessonViewer({
       }, 200)
       return () => clearTimeout(t)
     }
+    // Only re-run when the lesson or its saved position changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson.id, lesson.type, lesson.progress?.lastPosition])
 
   return (

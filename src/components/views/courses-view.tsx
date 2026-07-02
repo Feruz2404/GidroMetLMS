@@ -86,7 +86,7 @@ export function CoursesView() {
   useEffect(() => {
     api
       .get<{ data: Category[] }>('/categories')
-      .then((r) => setCategories(r.data))
+      .then((r) => setCategories(r.data ?? []))
       .catch(() => {})
   }, [])
 
@@ -130,7 +130,8 @@ export function CoursesView() {
     return () => {
       cancelled = true
     }
-  }, [queryString, toast, t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryString])
 
   const refetchCourses = useCallback(() => {
     // Re-trigger by toggling state — used after enroll
@@ -465,7 +466,7 @@ function CourseCard({
                 {(course.tutor!.firstName?.[0] ?? '?')}{(course.tutor!.lastName?.[0] ?? '?')}
               </AvatarFallback>
             </Avatar>
-            <span className="text-xs text-muted-foreground truncate">{tutorName}</span>
+            <span className="text-xs text-muted-foreground truncate min-w-0">{tutorName}</span>
           </div>
         )}
       </CardContent>

@@ -14,14 +14,15 @@ export async function GET(req: NextRequest) {
     const categoryId = searchParams.get('categoryId') ?? ''
     const level = searchParams.get('level') ?? ''
     const status = searchParams.get('status') ?? ''
-    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
-    const limit = Math.min(60, Math.max(1, parseInt(searchParams.get('limit') ?? '12', 10)))
+    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
+    const limit = Math.min(60, Math.max(1, parseInt(searchParams.get('limit') ?? '12', 10) || 12))
     const sort = searchParams.get('sort') ?? 'newest'
 
     // Build where clause based on role
     // Students: only published courses; tutors/admins can additionally see their own draft courses
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const where: any = {}
+    const and: any[] = []
 
     if (user.role === 'student') {
       where.status = 'published'
@@ -29,23 +30,23 @@ export async function GET(req: NextRequest) {
       where.status = status
     } else if (user.role === 'tutor') {
       // tutors: published OR their own (any status)
-      where.OR = [{ status: 'published' }, { tutorId: user.id }, { createdBy: user.id }]
+      and.push({ OR: [{ status: 'published' }, { tutorId: user.id }, { createdBy: user.id }] })
     }
     // admin sees everything (no filter)
 
     if (categoryId) where.categoryId = categoryId
     if (level) where.level = level
 
+    // Search is AND-combined with visibility so it actually narrows results
+    // (previously it was merged into the visibility OR, making it a no-op for tutors).
     if (search) {
-      where.OR = [
-        ...(Array.isArray(where.OR) ? where.OR : []),
-        { title: { contains: search } },
-        { description: { contains: search } },
-      ]
+      and.push({ OR: [{ title: { contains: search } }, { description: { contains: search } }] })
     }
 
+    if (and.length) where.AND = and
+
     // Sorting
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let orderBy: any = { createdAt: 'desc' }
     if (sort === 'title') orderBy = { title: 'asc' }
     else if (sort === 'popular') orderBy = { enrollments: { _count: 'desc' } }

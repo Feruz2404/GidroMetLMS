@@ -5,6 +5,7 @@ import {
   hashPassword,
   logActivity,
   getClientIp,
+  readJson,
   ok,
   err,
 } from '@/lib/auth'
@@ -12,7 +13,7 @@ import {
 // POST /api/auth/register — public self-registration
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
+    const body = await readJson(req)
     const {
       email,
       username,
@@ -33,8 +34,12 @@ export async function POST(req: NextRequest) {
     if (String(password).length < 6) {
       return err(400, 'Parol kamida 6 ta belgidan iborat bo\'lishi kerak')
     }
-    // Only student and tutor can self-register (not admin)
-    const safeRole = role === 'tutor' ? 'tutor' : 'student'
+    // Public self-registration always creates a student. Tutor/admin accounts
+    // are provisioned by an administrator via /api/users. Honoring a client-
+    // supplied role here would let anyone self-grant elevated (tutor) access by
+    // calling the API directly (the UI only ever offers "student").
+    void role
+    const safeRole = 'student'
 
     // Check for existing email/username
     const emailStr = String(email)

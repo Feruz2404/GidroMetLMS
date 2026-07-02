@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { api } from '@/lib/api'
-import { useAuth, useNav } from '@/store/auth'
+import { useNav } from '@/store/auth'
 import { useTranslation, type Language } from '@/lib/i18n'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -105,20 +105,31 @@ const LOCALE_MAP: Record<Language, string> = {
 }
 
 export function DashboardView() {
-  const user = useAuth((s) => s.user)!
+  const { t } = useTranslation()
   const navigate = useNav((s) => s.navigate)
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    // Deferred to a microtask so the initial call from the mount effect does not
+    // set state synchronously within the effect body.
+    Promise.resolve().then(() => {
+      setLoading(true)
+      setError(false)
+    })
     api
       .get<{ data: DashboardData }>('/dashboard')
       .then((r) => setData(r.data))
-      .catch(() => setData(null))
+      .catch(() => setError(true))
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading || !data) {
+  useEffect(() => {
+    load()
+  }, [load])
+
+  if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {Array.from({ length: 4 }).map((_, i) => (
@@ -127,6 +138,17 @@ export function DashboardView() {
           </Card>
         ))}
       </div>
+    )
+  }
+
+  if (error || !data) {
+    return (
+      <Card className="p-8">
+        <div className="flex flex-col items-center text-center gap-3">
+          <p className="text-sm text-muted-foreground">{t('common.error')}</p>
+          <Button variant="outline" onClick={load}>{t('common.retry')}</Button>
+        </div>
+      </Card>
     )
   }
 
@@ -157,8 +179,8 @@ function StatCard({
   return (
     <Card>
       <CardContent className="p-5">
-        <div className="flex items-start justify-between">
-          <div>
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
             <p className="text-sm text-muted-foreground">{label}</p>
             <p className="text-2xl font-bold mt-1">{value}</p>
             {trend && (
@@ -167,7 +189,7 @@ function StatCard({
               </p>
             )}
           </div>
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colorMap[color]}`}>
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 ${colorMap[color]}`}>
             <Icon className="w-5 h-5" />
           </div>
         </div>

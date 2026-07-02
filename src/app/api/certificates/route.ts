@@ -13,8 +13,8 @@ export async function GET(req: NextRequest) {
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
 
     const { searchParams } = new URL(req.url)
-    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
-    const limit = Math.min(60, Math.max(1, parseInt(searchParams.get('limit') ?? '12', 10)))
+    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
+    const limit = Math.min(60, Math.max(1, parseInt(searchParams.get('limit') ?? '12', 10) || 12))
     const search = searchParams.get('search')?.trim() ?? ''
     const courseId = searchParams.get('courseId')?.trim() ?? ''
     const status = searchParams.get('status')?.trim() ?? ''
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     const isStaff = user.role === 'tutor' || user.role === 'admin'
 
     // Base where clause — role-aware
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const where: any = {}
     if (!isStaff) {
       where.userId = user.id

@@ -7,6 +7,7 @@ import {
   verifyPassword,
   logActivity,
   getClientIp,
+  readJson,
   ok,
   err,
 } from '@/lib/auth'
@@ -18,7 +19,7 @@ import {
 // issues in iframe-embedded preview environments.
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
+    const body = await readJson(req)
     const { email, password } = body as { email?: string; password?: string }
 
     if (!email || !password) {

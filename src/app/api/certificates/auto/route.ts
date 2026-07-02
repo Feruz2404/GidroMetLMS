@@ -111,6 +111,12 @@ export async function POST(req: NextRequest) {
       for (const attempt of eligible) {
         if (!attempt.quiz.course) continue
         const course = attempt.quiz.course
+        // Guard against issuing two certificates for the same user+course when
+        // multiple eligible attempts exist in this batch. `eligible` is ordered
+        // by submittedAt asc, so the earliest passing attempt wins.
+        const pairKey = `${attempt.userId}|${attempt.quiz.courseId}`
+        if (userCourseSet.has(pairKey)) continue
+        userCourseSet.add(pairKey)
         const validUntil = course.validDays
           ? new Date(issuedAt.getTime() + course.validDays * 24 * 60 * 60 * 1000)
           : null

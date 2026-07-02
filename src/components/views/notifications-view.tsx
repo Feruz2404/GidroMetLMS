@@ -24,6 +24,13 @@ const TYPE_COLORS: Record<string, string> = {
   error: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400',
 }
 
+// Notification links are stored as bare view names. Only navigate to views the
+// app can actually render, so a stray/legacy link value can't blank the page.
+const NAVIGABLE_VIEWS = new Set([
+  'dashboard', 'courses', 'quizzes', 'library',
+  'certificates', 'reports', 'users', 'settings', 'notifications',
+])
+
 export function NotificationsView() {
   const { t } = useTranslation()
   const navigate = useNav((s) => s.navigate)
@@ -36,8 +43,8 @@ export function NotificationsView() {
     Promise.resolve().then(() => setLoading(true))
     try {
       const res = await api.get<{ data: { notifications: Notification[]; unreadCount: number } }>(`/notifications?filter=${filter}`)
-      setNotifications(res.data.notifications)
-      setUnreadCount(res.data.unreadCount)
+      setNotifications(res.data.notifications ?? [])
+      setUnreadCount(res.data.unreadCount ?? 0)
     } catch {
       // ignore
     } finally {
@@ -115,7 +122,7 @@ export function NotificationsView() {
                 className={`cursor-pointer transition-colors hover:bg-accent/50 ${!n.isRead ? 'border-primary/40 bg-primary/5' : ''}`}
                 onClick={() => {
                   if (!n.isRead) markRead(n.id)
-                  if (n.link) navigate(n.link)
+                  if (n.link && NAVIGABLE_VIEWS.has(n.link)) navigate(n.link)
                 }}
               >
                 <CardContent className="p-4 flex items-start gap-3">

@@ -129,7 +129,8 @@ export function QuizzesView() {
     return () => {
       cancelled = true
     }
-  }, [queryString, toast, t])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queryString])
 
   const handleCreateQuiz = () => {
     toast({
@@ -419,7 +420,7 @@ function QuizCard({
         {quiz.course && (
           <div className="text-xs text-muted-foreground mb-3 flex items-center gap-1.5">
             <GraduationCap className="w-3.5 h-3.5 shrink-0" />
-            <span className="truncate">{quiz.course.title}</span>
+            <span className="truncate min-w-0">{quiz.course.title}</span>
           </div>
         )}
 
@@ -457,7 +458,7 @@ function QuizCard({
                 {attemptsUsed} / {quiz.maxAttempts}
               </span>
             </div>
-            <Progress value={(attemptsUsed / quiz.maxAttempts) * 100} className="h-1.5" />
+            <Progress value={quiz.maxAttempts > 0 ? (attemptsUsed / quiz.maxAttempts) * 100 : 0} className="h-1.5" />
             {attemptsRemaining === 0 && (
               <p className="text-[11px] text-destructive flex items-center gap-1 mt-1">
                 <XCircle className="w-3 h-3" /> {t('quizzes.noAttemptsLeft')}

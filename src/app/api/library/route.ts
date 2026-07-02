@@ -18,12 +18,12 @@ export async function GET(req: NextRequest) {
     const year = searchParams.get('year')?.trim() ?? ''
     const language = searchParams.get('language')?.trim() ?? ''
     const bookmarksOnly = searchParams.get('bookmarks') === 'true'
-    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10))
-    const limit = Math.min(60, Math.max(1, parseInt(searchParams.get('limit') ?? '12', 10)))
+    const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
+    const limit = Math.min(60, Math.max(1, parseInt(searchParams.get('limit') ?? '12', 10) || 12))
     const sort = searchParams.get('sort') ?? 'newest'
 
     // Base filter: only active resources
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const where: any = { status: 'active' }
 
     if (type) where.type = type
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Sorting
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     let orderBy: any = { createdAt: 'desc' }
     if (sort === 'title') orderBy = { title: 'asc' }
     else if (sort === 'popular') orderBy = { viewCount: 'desc' }
