@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build && node scripts/copy-assets.js",
-    "build:vercel": "prisma generate --schema=prisma/schema.postgresql.prisma && prisma db push --schema=prisma/schema.postgresql.prisma --accept-data-loss && next build && node scripts/copy-assets.js",
+    "build:vercel": "node scripts/vercel-build.mjs",
     "start": "node .next/standalone/server.js",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -17,6 +17,9 @@
     "db:migrate": "prisma migrate dev",
     "db:reset": "prisma migrate reset",
     "db:seed": "npx tsx prisma/seed.ts",
+    "db:seed:admin": "npx tsx prisma/seed-admin.ts",
+    "db:generate:postgres": "prisma generate --schema=prisma/schema.postgresql.prisma",
+    "db:push:postgres": "prisma db push --schema=prisma/schema.postgresql.prisma",
     "postinstall": "prisma generate"
   },
   "dependencies": {

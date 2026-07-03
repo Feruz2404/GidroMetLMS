@@ -1,12 +1,22 @@
 import { NextRequest } from 'next/server'
-import { db, getPrismaErrorDetails } from '@/lib/db'
-import { getCurrentUser, ok, err, requireAuth, readJson } from '@/lib/auth'
+import { db } from '@/lib/db'
+import {
+  getCurrentUser,
+  handleApiError,
+  hashPassword,
+  ok,
+  err,
+  requireAuth,
+  readJson,
+  verifyPassword,
+} from '@/lib/auth'
 
-// GET /api/auth/me — current user profile
+// GET /api/auth/me - current user profile
 export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser(req)
-    if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
+    if (!user) return err(401, 'Unauthorized', undefined, 'UNAUTHORIZED')
+
     return ok({
       id: user.id,
       email: user.email,
@@ -24,22 +34,11 @@ export async function GET(req: NextRequest) {
       createdAt: user.createdAt,
     })
   } catch (e) {
-    if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
-      return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
-    }
-
-    const { code, message, isConnectionIssue } = getPrismaErrorDetails(e)
-    if (isConnectionIssue) {
-      console.error('me GET database error:', { code, message })
-      return err(503, 'Profil ma\'lumotlari vaqtincha mavjud emas. Iltimos, bir ozdan keyin qayta urinib ko\'ring.')
-    }
-
-    console.error('me GET error:', { error: e, code, message })
-    return err(500, 'Server xatosi')
+    return handleApiError('auth.me.get', e)
   }
 }
 
-// PATCH /api/auth/me — update profile
+// PATCH /api/auth/me - update profile and optionally password
 export async function PATCH(req: NextRequest) {
   try {
     const user = await requireAuth(req)
@@ -51,8 +50,18 @@ export async function PATCH(req: NextRequest) {
       department?: string | null
       position?: string | null
       avatarUrl?: string | null
+      password?: string
+      currentPassword?: string
     }>(req)
-    const { firstName, lastName, middleName, phone, department, position, avatarUrl } = body
+    const { firstName, lastName, middleName, phone, department, position, avatarUrl, password, currentPassword } = body
+
+    if (password !== undefined) {
+      if (!currentPassword) return err(400, 'Missing current password', undefined, 'MISSING_CURRENT_PASSWORD')
+      if (password.length < 6) return err(400, 'Password must be at least 6 characters', undefined, 'PASSWORD_TOO_SHORT')
+      if (!verifyPassword(currentPassword, user.passwordHash)) {
+        return err(401, 'Invalid credentials', undefined, 'INVALID_CREDENTIALS')
+      }
+    }
 
     const updated = await db.user.update({
       where: { id: user.id },
@@ -64,6 +73,7 @@ export async function PATCH(req: NextRequest) {
         ...(department !== undefined && { department }),
         ...(position !== undefined && { position }),
         ...(avatarUrl !== undefined && { avatarUrl }),
+        ...(password !== undefined && { passwordHash: hashPassword(password) }),
       },
     })
 
@@ -81,17 +91,15 @@ export async function PATCH(req: NextRequest) {
       position: updated.position,
     })
   } catch (e) {
-    if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
-      return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
+    if (e instanceof Error && e.message === 'UNAUTHORIZED') {
+      return err(401, 'Unauthorized', undefined, 'UNAUTHORIZED')
+    }
+    if (e instanceof Error && e.message === 'FORBIDDEN') {
+      return err(403, 'Forbidden', undefined, 'FORBIDDEN')
     }
 
-    const { code, message, isConnectionIssue } = getPrismaErrorDetails(e)
-    if (isConnectionIssue) {
-      console.error('me PATCH database error:', { code, message })
-      return err(503, 'Profil yangilash xizmati vaqtincha mavjud emas. Iltimos, bir ozdan keyin qayta urinib ko\'ring.')
-    }
-
-    console.error('me PATCH error:', { error: e, code, message })
-    return err(500, 'Server xatosi')
+    return handleApiError('auth.me.patch', e)
   }
 }
+
+export const dynamic = 'force-dynamic'

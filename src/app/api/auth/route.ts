@@ -1,42 +1,41 @@
 import { NextRequest } from 'next/server'
-import { db, getPrismaErrorDetails } from '@/lib/db'
+import { db } from '@/lib/db'
 import {
   createSession,
-  destroySession,
-  getSession,
   verifyPassword,
   logActivity,
   getClientIp,
+  handleApiError,
+  logoutRequest,
   readJson,
   ok,
   err,
 } from '@/lib/auth'
 
-// POST /api/auth — login
+// POST /api/auth - login
 // Returns a Bearer token in the response body. The client stores it in
 // localStorage and sends it as "Authorization: Bearer <token>" on
-// subsequent requests. This avoids all cookie/SameSite/third-party-cookie
-// issues in iframe-embedded preview environments.
+// subsequent requests.
 export async function POST(req: NextRequest) {
   try {
     const body = await readJson(req)
     const { email, password } = body as { email?: string; password?: string }
 
     if (!email || !password) {
-      return err(400, 'Email va parol majburiy')
+      return err(400, 'Missing credentials', undefined, 'MISSING_CREDENTIALS')
     }
 
     const user = await db.user.findUnique({ where: { email } })
     if (!user) {
-      return err(401, 'Email yoki parol noto\'g\'ri')
+      return err(401, 'Invalid credentials', undefined, 'INVALID_CREDENTIALS')
     }
 
     if (!user.isActive) {
-      return err(403, 'Hisobingiz bloklangan. Administratorga murojaat qiling.')
+      return err(403, 'Account blocked', undefined, 'ACCOUNT_BLOCKED')
     }
 
     if (!verifyPassword(password, user.passwordHash)) {
-      return err(401, 'Email yoki parol noto\'g\'ri')
+      return err(401, 'Invalid credentials', undefined, 'INVALID_CREDENTIALS')
     }
 
     const token = await createSession(user.id)
@@ -46,7 +45,15 @@ export async function POST(req: NextRequest) {
       data: { lastLoginAt: new Date() },
     })
 
-    await logActivity(user.id, 'login', 'user', user.id, undefined, getClientIp(req), req.headers.get('user-agent') ?? undefined)
+    await logActivity(
+      user.id,
+      'login',
+      'user',
+      user.id,
+      undefined,
+      getClientIp(req),
+      req.headers.get('user-agent') ?? undefined
+    )
 
     const userData = {
       id: user.id,
@@ -65,50 +72,19 @@ export async function POST(req: NextRequest) {
       createdAt: user.createdAt,
     }
 
-    // Return token in response body — client stores in localStorage
     return ok({ ...userData, token })
   } catch (e) {
-    if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
-      return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
-    }
-
-    const { code, message, isConnectionIssue } = getPrismaErrorDetails(e)
-    if (isConnectionIssue) {
-      console.error('Login database error:', { code, message })
-      return err(503, 'Autentifikatsiya xizmati vaqtincha mavjud emas. Iltimos, bir ozdan keyin qayta urinib ko\'ring.')
-    }
-
-    console.error('Login error:', { error: e, code, message })
-    return err(500, 'Server xatosi')
+    return handleApiError('auth.login', e)
   }
 }
 
-// DELETE /api/auth — logout
-// Reads the Bearer token from the Authorization header and revokes the session.
+// DELETE /api/auth - logout
 export async function DELETE(req: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization') ?? ''
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : undefined
-
-    const session = await getSession(token)
-    if (session) {
-      await destroySession(token)
-      await logActivity(session.user.id, 'logout', undefined, undefined, undefined, getClientIp(req))
-    }
-
-    return ok({ success: true })
+    return await logoutRequest(req)
   } catch (e) {
-    if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
-      return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
-    }
-
-    const { code, message, isConnectionIssue } = getPrismaErrorDetails(e)
-    if (isConnectionIssue) {
-      console.error('Logout database error:', { code, message })
-      return err(503, 'Autentifikatsiya xizmati vaqtincha mavjud emas. Iltimos, bir ozdan keyin qayta urinib ko\'ring.')
-    }
-
-    console.error('Logout error:', { error: e, code, message })
-    return err(500, 'Server xatosi')
+    return handleApiError('auth.logout', e)
   }
 }
+
+export const dynamic = 'force-dynamic'

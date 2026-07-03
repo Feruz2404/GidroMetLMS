@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "buildCommand": "npx prisma generate --schema=prisma/schema.postgresql.prisma && npx prisma db push --schema=prisma/schema.postgresql.prisma --accept-data-loss && next build",
+  "buildCommand": "npm run build:vercel",
   "headers": [
     {
       "source": "/(.*)",

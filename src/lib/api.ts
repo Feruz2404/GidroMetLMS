@@ -10,7 +10,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public statusCode: number,
-    public errors?: unknown
+    public errors?: unknown,
+    public code?: string
   ) {
     super(message)
     Object.setPrototypeOf(this, ApiError.prototype)
@@ -68,7 +69,7 @@ async function request<T>(
   const res = await fetch(url, { ...options, headers })
 
   if (!res.ok) {
-    let body: { message?: string; errors?: unknown } = {}
+    let body: { message?: string; errors?: unknown; code?: string } = {}
     try {
       body = await res.json()
     } catch {
@@ -81,7 +82,7 @@ async function request<T>(
       onAuthError()
     }
 
-    throw new ApiError(body.message || `HTTP ${res.status}`, res.status, body.errors)
+    throw new ApiError(body.message || `HTTP ${res.status}`, res.status, body.errors, body.code)
   }
 
   const text = await res.text()
