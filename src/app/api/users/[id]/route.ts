@@ -1,11 +1,13 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireRole, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { requirePermission, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { PERMISSIONS } from '@/server/auth/permissions'
+import { adminRoleSchema } from '@/validators/auth'
 
 // GET /api/users/[id]
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireRole(_req, 'admin')
+    await requirePermission(_req, PERMISSIONS.USERS_MANAGE)
     const { id } = await params
     const user = await db.user.findUnique({
       where: { id },
@@ -38,13 +40,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 // PATCH /api/users/[id] — update user
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const admin = await requireRole(req, 'admin')
+    const admin = await requirePermission(req, PERMISSIONS.USERS_MANAGE)
     const { id } = await params
     const body = await req.json()
     const { firstName, lastName, middleName, phone, department, position, role } = body as Record<string, unknown>
 
     const user = await db.user.findUnique({ where: { id } })
     if (!user) return err(404, 'Foydalanuvchi topilmadi')
+    const parsedRole = role === undefined ? null : adminRoleSchema.safeParse(String(role))
+    if (parsedRole && !parsedRole.success) return err(400, parsedRole.error.issues[0]?.message ?? 'Invalid role')
 
     const updated = await db.user.update({
       where: { id },
@@ -55,7 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(phone !== undefined && { phone: phone === null ? null : String(phone) }),
         ...(department !== undefined && { department: department === null ? null : String(department) }),
         ...(position !== undefined && { position: position === null ? null : String(position) }),
-        ...(role !== undefined && ['admin', 'tutor', 'student'].includes(String(role)) && { role: String(role) }),
+        ...(parsedRole?.success && { role: parsedRole.data }),
       },
     })
 
@@ -77,7 +81,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 // DELETE /api/users/[id] — soft delete (deactivate)
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const admin = await requireRole(req, 'admin')
+    const admin = await requirePermission(req, PERMISSIONS.USERS_MANAGE)
     const { id } = await params
 
     if (id === admin.id) return err(400, 'O\'z hisobingizni o\'chira olmaysiz')

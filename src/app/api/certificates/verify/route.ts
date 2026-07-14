@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const hash = searchParams.get('hash')
 
-    if (!hash || hash.length < 8) {
+    if (!hash || !/^[a-f0-9]{40}$/i.test(hash)) {
       return err(404, 'Sertifikat topilmadi')
     }
 

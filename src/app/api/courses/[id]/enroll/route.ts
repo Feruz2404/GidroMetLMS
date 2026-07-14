@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { isLearnerRole } from '@/server/auth/permissions'
 
 // POST /api/courses/[id]/enroll — student self-enrolls
 export async function POST(
@@ -10,7 +11,7 @@ export async function POST(
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (user.role !== 'student') return err(403, 'Faqat talabalar kursga yozila oladi')
+    if (!isLearnerRole(user.role)) return err(403, 'Faqat tinglovchilar kursga yozila oladi')
 
     const { id } = await params
 

@@ -25,11 +25,6 @@ export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY)
 }
 
-export function setToken(token: string): void {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(TOKEN_KEY, token)
-}
-
 export function clearToken(): void {
   if (typeof window === 'undefined') return
   localStorage.removeItem(TOKEN_KEY)
@@ -66,7 +61,7 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const res = await fetch(url, { ...options, headers })
+  const res = await fetch(url, { ...options, headers, credentials: 'same-origin', cache: 'no-store' })
 
   if (!res.ok) {
     let body: { message?: string; errors?: unknown; code?: string } = {}
@@ -137,7 +132,15 @@ export function timeAgo(date: string | Date): string {
 }
 
 // Shared types
-export type Role = 'admin' | 'tutor' | 'student'
+export type Role =
+  | 'super_admin'
+  | 'administrator'
+  | 'instructor'
+  | 'department_manager'
+  | 'learner'
+  | 'admin'
+  | 'tutor'
+  | 'student'
 
 export interface User {
   id: string
@@ -154,7 +157,6 @@ export interface User {
   isActive: boolean
   lastLoginAt?: string | null
   createdAt: string
-  token?: string // present in login response
 }
 
 export interface Course {

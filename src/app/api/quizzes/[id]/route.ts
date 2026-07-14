@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { hasPermission, isInstructorRole, isLearnerRole, PERMISSIONS } from '@/server/auth/permissions'
 
 // GET /api/quizzes/[id] — quiz detail with questions + options
 // CRITICAL: strip isCorrect from options for students (don't reveal answers before submission)
@@ -23,7 +24,7 @@ export async function GET(
           include: { options: { orderBy: { order: 'asc' } } },
         },
         _count: { select: { questions: true, attempts: true } },
-        ...(user.role === 'student'
+        ...(isLearnerRole(user.role)
           ? {
               attempts: {
                 where: { userId: user.id },
@@ -48,12 +49,12 @@ export async function GET(
     if (!quiz) return err(404, 'Test topilmadi')
 
     // Visibility: students only see published
-    if (user.role === 'student' && quiz.status !== 'published') {
+    if (isLearnerRole(user.role) && quiz.status !== 'published') {
       return err(404, 'Test topilmadi')
     }
     // Tutors can only see own non-published
     if (
-      user.role === 'tutor' &&
+      isInstructorRole(user.role) &&
       quiz.status !== 'published' &&
       quiz.createdBy !== user.id
     ) {
@@ -77,7 +78,7 @@ export async function GET(
     // Students: check maxAttempts (in_progress + graded all count toward limit)
     let maxAttemptsExceeded = false
     let gradedCount = 0
-    if (user.role === 'student' && attempts) {
+    if (isLearnerRole(user.role) && attempts) {
       gradedCount = attempts.filter(
         (a) => a.status === 'graded' || a.status === 'submitted' || a.status === 'in_progress'
       ).length
@@ -85,7 +86,7 @@ export async function GET(
     }
 
     // SECURITY: For students, strip isCorrect from options
-    const isStaff = user.role === 'tutor' || user.role === 'admin'
+    const isStaff = hasPermission(user.role, PERMISSIONS.ASSESSMENTS_MANAGE)
     const questions = quiz.questions.map((q) => ({
       id: q.id,
       type: q.type,
@@ -124,13 +125,13 @@ export async function PATCH(
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (!['tutor', 'admin'].includes(user.role)) return err(403, 'Ruxsat yo\'q')
+    if (!hasPermission(user.role, PERMISSIONS.ASSESSMENTS_MANAGE)) return err(403, 'Ruxsat yo\'q')
 
     const { id } = await params
     const quiz = await db.quiz.findUnique({ where: { id } })
     if (!quiz) return err(404, 'Test topilmadi')
 
-    if (user.role === 'tutor' && quiz.createdBy !== user.id) {
+    if (isInstructorRole(user.role) && quiz.createdBy !== user.id) {
       return err(403, 'Faqat o\'z testingizni tahrirlay olasiz')
     }
 

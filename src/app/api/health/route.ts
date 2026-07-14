@@ -31,7 +31,7 @@ export async function GET() {
     sessionSecretConfigured &&
     databaseReachable
 
-  return Response.json(
+  const response = Response.json(
     {
       status: healthy ? 'ok' : 'degraded',
       checks: {
@@ -52,6 +52,8 @@ export async function GET() {
     },
     { status: healthy ? 200 : 503 }
   )
+  response.headers.set('Cache-Control', 'no-store, max-age=0')
+  return response
 }
 
 export const dynamic = 'force-dynamic'

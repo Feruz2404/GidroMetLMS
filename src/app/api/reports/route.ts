@@ -1,28 +1,59 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err } from '@/lib/auth'
+import type { Prisma } from '@prisma/client'
+import { isAdminRole, isInstructorRole, isLearnerRole, isManagerRole } from '@/server/auth/permissions'
 
 // GET /api/reports?type=...
 export async function GET(req: NextRequest) {
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (user.role === 'student') return err(403, 'Ruxsat yo\'q')
+    if (isLearnerRole(user.role)) return err(403, 'Ruxsat yo\'q')
+    const manager = isManagerRole(user.role)
+    const instructor = isInstructorRole(user.role)
+    if (manager && !user.department) return err(403, 'Department scope is not configured', undefined, 'DEPARTMENT_SCOPE_MISSING')
+
+    const courseScope: Prisma.CourseWhereInput = instructor
+      ? { OR: [{ tutorId: user.id }, { createdBy: user.id }] }
+      : manager
+        ? { enrollments: { some: { user: { department: user.department } } } }
+        : {}
+    const learnerScope: Prisma.UserWhereInput = manager
+      ? { department: user.department }
+      : instructor
+        ? { enrollments: { some: { course: courseScope } } }
+        : {}
+    const enrollmentScope: Prisma.EnrollmentWhereInput = manager
+      ? { user: { department: user.department } }
+      : instructor
+        ? { course: courseScope }
+        : {}
+    const attemptScope: Prisma.QuizAttemptWhereInput = manager
+      ? { user: { department: user.department } }
+      : instructor
+        ? { quiz: { course: courseScope } }
+        : {}
+    const certificateScope: Prisma.CertificateWhereInput = manager
+      ? { user: { department: user.department } }
+      : instructor
+        ? { course: courseScope }
+        : {}
 
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type') ?? 'overview'
 
     if (type === 'overview') {
-      const totalStudents = await db.user.count({ where: { role: 'student', isActive: true } })
-      const totalTutors = await db.user.count({ where: { role: 'tutor', isActive: true } })
-      const totalCourses = await db.course.count({ where: { status: 'published' } })
-      const totalEnrollments = await db.enrollment.count()
-      const completedEnrollments = await db.enrollment.count({ where: { status: 'completed' } })
-      const totalCertificates = await db.certificate.count({ where: { status: 'active' } })
+      const totalStudents = await db.user.count({ where: { role: { in: ['student', 'learner'] }, isActive: true, ...learnerScope } })
+      const totalTutors = instructor ? 1 : await db.user.count({ where: { role: { in: ['tutor', 'instructor'] }, isActive: true, ...(manager ? { department: user.department } : {}) } })
+      const totalCourses = await db.course.count({ where: { status: 'published', ...courseScope } })
+      const totalEnrollments = await db.enrollment.count({ where: enrollmentScope })
+      const completedEnrollments = await db.enrollment.count({ where: { status: 'completed', ...enrollmentScope } })
+      const totalCertificates = await db.certificate.count({ where: { status: 'active', ...certificateScope } })
       const totalResources = await db.libraryResource.count({ where: { status: 'active' } })
       const totalDownloads = await db.resourceDownload.count()
-      const totalAttempts = await db.quizAttempt.count({ where: { status: 'graded' } })
-      const passedAttempts = await db.quizAttempt.count({ where: { status: 'graded', passed: true } })
+      const totalAttempts = await db.quizAttempt.count({ where: { status: 'graded', ...attemptScope } })
+      const passedAttempts = await db.quizAttempt.count({ where: { status: 'graded', passed: true, ...attemptScope } })
 
       return ok({
         overview: {
@@ -44,7 +75,7 @@ export async function GET(req: NextRequest) {
 
     if (type === 'students') {
       const students = await db.user.findMany({
-        where: { role: 'student' },
+        where: { role: { in: ['student', 'learner'] }, ...learnerScope },
         include: {
           enrollments: { select: { id: true, progress: true, status: true, courseId: true, course: { select: { title: true } } } },
           certificates: { where: { status: 'active' }, select: { id: true, percentage: true, course: { select: { title: true } } } },
@@ -73,10 +104,10 @@ export async function GET(req: NextRequest) {
 
     if (type === 'courses') {
       const courses = await db.course.findMany({
-        where: { status: 'published' },
+        where: { status: 'published', ...courseScope },
         include: {
           _count: { select: { enrollments: true, lessons: true } },
-          enrollments: { select: { progress: true, status: true } },
+          enrollments: { where: manager ? enrollmentScope : undefined, select: { progress: true, status: true } },
           tutor: { select: { firstName: true, lastName: true } },
           category: { select: { name: true } },
         },
@@ -107,7 +138,7 @@ export async function GET(req: NextRequest) {
 
     if (type === 'quiz-results') {
       const attempts = await db.quizAttempt.findMany({
-        where: { status: 'graded' },
+        where: { status: 'graded', ...attemptScope },
         include: {
           user: { select: { firstName: true, lastName: true, email: true } },
           quiz: { select: { title: true, course: { select: { title: true } } } },
@@ -149,6 +180,7 @@ export async function GET(req: NextRequest) {
 
     if (type === 'certificates') {
       const certs = await db.certificate.findMany({
+        where: certificateScope,
         include: {
           user: { select: { firstName: true, lastName: true, email: true } },
           course: { select: { title: true } },
@@ -213,7 +245,7 @@ export async function GET(req: NextRequest) {
 
     if (type === 'audit-log') {
       // The audit log exposes every user's actions and IP addresses — admin only.
-      if (user.role !== 'admin') return err(403, 'Ruxsat yo\'q')
+      if (!isAdminRole(user.role)) return err(403, 'Ruxsat yo\'q')
       const logs = await db.activityLog.findMany({
         include: { user: { select: { firstName: true, lastName: true, email: true, role: true } } },
         orderBy: { createdAt: 'desc' },

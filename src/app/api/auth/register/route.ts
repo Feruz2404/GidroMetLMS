@@ -9,40 +9,29 @@ import {
   readJson,
   ok,
   err,
+  withSessionCookie,
 } from '@/lib/auth'
+import { formatValidationErrors, publicRegistrationSchema } from '@/validators/auth'
 
 // POST /api/auth/register - public self-registration
 export async function POST(req: NextRequest) {
   try {
-    const body = await readJson(req)
-    const {
-      email,
-      username,
-      password,
-      role,
-      firstName,
-      lastName,
-      middleName,
-      phone,
-      department,
-      position,
-    } = body as Record<string, unknown>
-
-    if (!email || !username || !password || !firstName || !lastName) {
-      return err(400, 'Missing required fields', undefined, 'MISSING_FIELDS')
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PUBLIC_REGISTRATION !== 'true') {
+      return err(403, 'Public registration is disabled', undefined, 'REGISTRATION_DISABLED')
     }
 
-    if (String(password).length < 6) {
-      return err(400, 'Password must be at least 6 characters', undefined, 'PASSWORD_TOO_SHORT')
+    const parsed = publicRegistrationSchema.safeParse(await readJson(req))
+    if (!parsed.success) {
+      return err(400, 'Invalid registration request', formatValidationErrors(parsed.error), 'INVALID_REQUEST')
     }
+    const { email, username, password, firstName, lastName, middleName, phone } = parsed.data
 
-    // Public self-registration always creates a student. Tutor/admin accounts
-    // are provisioned by an administrator via /api/users.
-    void role
-    const safeRole = 'student'
+    // Public self-registration always creates a learner. Staff accounts are
+    // provisioned by an administrator via /api/users.
+    const safeRole = 'learner'
 
-    const emailStr = String(email).trim().toLowerCase()
-    const usernameStr = String(username).trim()
+    const emailStr = email
+    const usernameStr = username
     const existing = await db.user.findFirst({
       where: { OR: [{ email: emailStr }, { username: usernameStr }] },
     })
@@ -54,19 +43,20 @@ export async function POST(req: NextRequest) {
       data: {
         email: emailStr,
         username: usernameStr,
-        passwordHash: hashPassword(String(password)),
+        passwordHash: hashPassword(password),
         role: safeRole,
-        firstName: String(firstName),
-        lastName: String(lastName),
-        middleName: middleName ? String(middleName) : null,
-        phone: phone ? String(phone) : null,
-        department: department ? String(department) : null,
-        position: position ? String(position) : null,
-        emailVerifiedAt: new Date(),
+        firstName,
+        lastName,
+        middleName: middleName || null,
+        phone: phone || null,
+        emailVerifiedAt: null,
       },
     })
 
-    const token = await createSession(user.id)
+    const token = await createSession(user.id, {
+      ipAddress: getClientIp(req),
+      deviceInfo: req.headers.get('user-agent') ?? undefined,
+    })
 
     await logActivity(
       user.id,
@@ -78,15 +68,14 @@ export async function POST(req: NextRequest) {
       req.headers.get('user-agent') ?? undefined
     )
 
-    return ok({
+    return withSessionCookie(ok({
       id: user.id,
       email: user.email,
       username: user.username,
       role: user.role,
       firstName: user.firstName,
       lastName: user.lastName,
-      token,
-    })
+    }), token)
   } catch (e) {
     return handleApiError('auth.register', e)
   }

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { canManageCourse, hasPermission, isInstructorRole, isLearnerRole, PERMISSIONS } from '@/server/auth/permissions'
 
 // GET /api/courses/[id] — full course detail with sections, lessons, progress
 export async function GET(
@@ -33,13 +34,13 @@ export async function GET(
           orderBy: { order: 'asc' },
           include: {
             section: { select: { id: true, title: true, order: true } },
-            progress: user.role === 'student'
+            progress: isLearnerRole(user.role)
               ? { where: { userId: user.id } }
               : false,
           },
         },
         _count: { select: { enrollments: true, lessons: true } },
-        enrollments: user.role === 'student'
+        enrollments: isLearnerRole(user.role)
           ? { where: { userId: user.id } }
           : false,
       },
@@ -48,12 +49,12 @@ export async function GET(
     if (!course) return err(404, 'Kurs topilmadi')
 
     // Visibility check: students can only see published courses
-    if (user.role === 'student' && course.status !== 'published') {
+    if (isLearnerRole(user.role) && course.status !== 'published') {
       return err(404, 'Kurs topilmadi')
     }
     // Tutors can only see their own drafts/non-published
     if (
-      user.role === 'tutor' &&
+      isInstructorRole(user.role) &&
       course.status !== 'published' &&
       course.tutorId !== user.id &&
       course.createdBy !== user.id
@@ -70,7 +71,7 @@ export async function GET(
 
     // For students: lock lessons if not enrolled (unless free preview)
     const isEnrolled = !!enrollment
-    const isOwner = user.role === 'tutor' && (course.tutorId === user.id || course.createdBy === user.id) || user.role === 'admin'
+    const isOwner = canManageCourse(user.role, user.id, course)
 
     const lessons = (course.lessons as Array<typeof course.lessons[number]>).map((l) => {
       const { progress, ...lessonRest } = l as typeof l & { progress?: Array<{ isCompleted: boolean; watchTimeSec: number; lastPosition: number }> }
@@ -119,14 +120,14 @@ export async function PATCH(
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (!['tutor', 'admin'].includes(user.role)) return err(403, 'Ruxsat yo\'q')
+    if (!hasPermission(user.role, PERMISSIONS.COURSES_MANAGE_ALL) && !hasPermission(user.role, PERMISSIONS.COURSES_MANAGE_OWN)) return err(403, 'Ruxsat yo\'q')
 
     const { id } = await params
     const course = await db.course.findUnique({ where: { id } })
     if (!course) return err(404, 'Kurs topilmadi')
 
     // Tutor can only edit their own courses; admin can edit any
-    if (user.role === 'tutor' && course.tutorId !== user.id && course.createdBy !== user.id) {
+    if (!canManageCourse(user.role, user.id, course)) {
       return err(403, 'Faqat o\'z kurslaringizni tahrirlay olasiz')
     }
 

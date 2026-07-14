@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity } from '@/lib/auth'
+import { isLearnerRole } from '@/server/auth/permissions'
 
 // POST /api/courses/[id]/progress — upsert lesson progress + recalculate course progress
 // Body: { lessonId, isCompleted, watchTimeSec, lastPosition }
@@ -11,7 +12,7 @@ export async function POST(
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (user.role !== 'student') return err(403, 'Faqat talabalar progressni yangilay oladi')
+    if (!isLearnerRole(user.role)) return err(403, 'Faqat tinglovchilar progressni yangilay oladi')
 
     const { id } = await params
     const body = await req.json()
@@ -39,9 +40,18 @@ export async function POST(
       where: { lessonId_userId: { lessonId, userId: user.id } },
     })
 
+    if (isCompleted !== undefined && typeof isCompleted !== 'boolean') return err(400, 'isCompleted boolean bo\'lishi kerak')
+    const parsedWatchTime = Number(watchTimeSec)
+    const parsedPosition = Number(lastPosition)
+    const newWatchTime = Math.min(24 * 60 * 60, Math.max(existing?.watchTimeSec ?? 0, Number.isFinite(parsedWatchTime) ? Math.max(0, Math.floor(parsedWatchTime)) : 0))
+    const newPosition = Math.min(24 * 60 * 60, Math.max(existing?.lastPosition ?? 0, Number.isFinite(parsedPosition) ? Math.max(0, Math.floor(parsedPosition)) : 0))
     const nowCompleted = isCompleted ?? existing?.isCompleted ?? false
-    const newWatchTime = Math.max(existing?.watchTimeSec ?? 0, Number(watchTimeSec) || 0)
-    const newPosition = Math.max(existing?.lastPosition ?? 0, Number(lastPosition) || 0)
+    if (nowCompleted && lesson.type === 'video' && !existing?.isCompleted) {
+      const requiredWatchTime = Math.max(30, Math.floor(lesson.durationMin * 60 * 0.8))
+      if (newWatchTime < requiredWatchTime) {
+        return err(422, 'Videoning kamida 80 foizini ko\'rish kerak', { requiredWatchTime }, 'VIDEO_INCOMPLETE')
+      }
+    }
 
     const progress = await db.lessonProgress.upsert({
       where: { lessonId_userId: { lessonId, userId: user.id } },

@@ -2,7 +2,9 @@ import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import {
   createSession,
+  hashPassword,
   verifyPassword,
+  needsPasswordRehash,
   logActivity,
   getClientIp,
   handleApiError,
@@ -10,39 +12,46 @@ import {
   readJson,
   ok,
   err,
+  withSessionCookie,
 } from '@/lib/auth'
+import { consumeRateLimit, resetRateLimit } from '@/lib/rate-limit'
+import { formatValidationErrors, loginSchema } from '@/validators/auth'
 
 // POST /api/auth - login
-// Returns a Bearer token in the response body. The client stores it in
-// localStorage and sends it as "Authorization: Bearer <token>" on
-// subsequent requests.
+// Creates a server-side session and returns its opaque token only in a
+// secure, HttpOnly cookie. Legacy bearer sessions are read-only migration
+// compatibility and are never issued by this endpoint.
 export async function POST(req: NextRequest) {
   try {
-    const body = await readJson(req)
-    const { email, password } = body as { email?: string; password?: string }
-
-    if (!email || !password) {
-      return err(400, 'Missing credentials', undefined, 'MISSING_CREDENTIALS')
+    const parsed = loginSchema.safeParse(await readJson(req))
+    if (!parsed.success) return err(400, 'Invalid login request', formatValidationErrors(parsed.error), 'INVALID_REQUEST')
+    const { email, password } = parsed.data
+    const clientIp = getClientIp(req)
+    const rateLimitKey = `${clientIp}:${email}`
+    const limit = consumeRateLimit(rateLimitKey)
+    if (!limit.allowed) {
+      const response = err(429, 'Invalid email or password', undefined, 'TOO_MANY_ATTEMPTS')
+      response.headers.set('Retry-After', String(limit.retryAfterSeconds))
+      return response
     }
 
     const user = await db.user.findUnique({ where: { email } })
-    if (!user) {
+    if (!user || !user.isActive || !verifyPassword(password, user.passwordHash)) {
       return err(401, 'Invalid credentials', undefined, 'INVALID_CREDENTIALS')
     }
 
-    if (!user.isActive) {
-      return err(403, 'Account blocked', undefined, 'ACCOUNT_BLOCKED')
-    }
-
-    if (!verifyPassword(password, user.passwordHash)) {
-      return err(401, 'Invalid credentials', undefined, 'INVALID_CREDENTIALS')
-    }
-
-    const token = await createSession(user.id)
+    const token = await createSession(user.id, {
+      ipAddress: clientIp,
+      deviceInfo: req.headers.get('user-agent') ?? undefined,
+    })
+    resetRateLimit(rateLimitKey)
 
     await db.user.update({
       where: { id: user.id },
-      data: { lastLoginAt: new Date() },
+      data: {
+        lastLoginAt: new Date(),
+        ...(needsPasswordRehash(user.passwordHash) ? { passwordHash: hashPassword(password) } : {}),
+      },
     })
 
     await logActivity(
@@ -51,7 +60,7 @@ export async function POST(req: NextRequest) {
       'user',
       user.id,
       undefined,
-      getClientIp(req),
+      clientIp,
       req.headers.get('user-agent') ?? undefined
     )
 
@@ -72,7 +81,7 @@ export async function POST(req: NextRequest) {
       createdAt: user.createdAt,
     }
 
-    return ok({ ...userData, token })
+    return withSessionCookie(ok(userData), token)
   } catch (e) {
     return handleApiError('auth.login', e)
   }

@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err } from '@/lib/auth'
+import type { Prisma } from '@prisma/client'
+import { isAdminRole, isInstructorRole, isManagerRole } from '@/server/auth/permissions'
 
 // GET /api/certificates — paginated list (role-aware)
 // Students: only their own active certificates (include course + template)
@@ -19,15 +21,23 @@ export async function GET(req: NextRequest) {
     const courseId = searchParams.get('courseId')?.trim() ?? ''
     const status = searchParams.get('status')?.trim() ?? ''
 
-    const isStaff = user.role === 'tutor' || user.role === 'admin'
+    const isAdmin = isAdminRole(user.role)
+    const isInstructor = isInstructorRole(user.role)
+    const isManager = isManagerRole(user.role)
+    const isStaff = isAdmin || isInstructor || isManager
 
     // Base where clause — role-aware
      
-    const where: any = {}
+    const where: Prisma.CertificateWhereInput = {}
     if (!isStaff) {
       where.userId = user.id
       where.status = 'active'
     } else {
+      if (isInstructor) where.course = { OR: [{ tutorId: user.id }, { createdBy: user.id }] }
+      if (isManager) {
+        if (!user.department) return err(403, 'Department scope is not configured', undefined, 'DEPARTMENT_SCOPE_MISSING')
+        where.user = { department: user.department }
+      }
       if (status && ['active', 'revoked'].includes(status)) {
         where.status = status
       }

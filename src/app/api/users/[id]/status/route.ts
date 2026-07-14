@@ -1,11 +1,12 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
-import { requireRole, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { requirePermission, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { PERMISSIONS } from '@/server/auth/permissions'
 
 // PATCH /api/users/[id]/status — activate or block user
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const admin = await requireRole(req, 'admin')
+    const admin = await requirePermission(req, PERMISSIONS.USERS_MANAGE)
     const { id } = await params
     const body = await req.json()
     const rawIsActive = body.isActive

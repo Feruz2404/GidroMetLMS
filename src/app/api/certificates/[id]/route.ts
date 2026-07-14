@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { isAdminRole, isInstructorRole, isManagerRole } from '@/server/auth/permissions'
 
 // GET /api/certificates/[id] — full certificate with user, course, template
 // Students can only view their own; tutors/admins can view any
@@ -23,9 +24,10 @@ export async function GET(
             firstName: true,
             lastName: true,
             middleName: true,
+            department: true,
           },
         },
-        course: { select: { id: true, title: true } },
+        course: { select: { id: true, title: true, tutorId: true, createdBy: true } },
         template: {
           select: {
             id: true,
@@ -43,8 +45,11 @@ export async function GET(
     if (!certificate) return err(404, 'Sertifikat topilmadi')
 
     // Ownership check: students can only view their own
-    const isStaff = user.role === 'tutor' || user.role === 'admin'
-    if (!isStaff && certificate.userId !== user.id) {
+    const isAuthorizedStaff =
+      isAdminRole(user.role) ||
+      (isInstructorRole(user.role) && (certificate.course.tutorId === user.id || certificate.course.createdBy === user.id)) ||
+      (isManagerRole(user.role) && certificate.user.department === user.department)
+    if (!isAuthorizedStaff && certificate.userId !== user.id) {
       return err(403, 'Ruxsat yo\'q')
     }
 
@@ -67,7 +72,7 @@ export async function PATCH(
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (user.role !== 'admin') return err(403, 'Faqat administratorlar sertifikatni bekor qila oladi')
+    if (!isAdminRole(user.role)) return err(403, 'Faqat administratorlar sertifikatni bekor qila oladi')
 
     const { id } = await params
     const existing = await db.certificate.findUnique({ where: { id } })

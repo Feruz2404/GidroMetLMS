@@ -1,76 +1,115 @@
-﻿# GidroMetLMS
+# GidroEdu LMS
 
-Next.js LMS for GidroEdu.
+GidroEdu LMS is a multilingual professional-development platform for hydrometeorology specialists. It supports role-aware dashboards, courses and lessons, secure assessments, a digital library, certificate issuance and public verification, notifications, and operational reports.
 
-## Local Setup
+The repository is a Next.js 16 App Router application using React 19, TypeScript, Tailwind CSS, Prisma, SQLite for isolated local development, and PostgreSQL as the authoritative production database.
 
-1. Copy `.env.example` to `.env`.
-2. For local development, keep `DATABASE_URL="file:../db/custom.db"` or point it to PostgreSQL.
-3. Set `SESSION_SECRET` to a random 32+ character value.
-4. Install and prepare the database:
+## Security model
+
+- Browser sessions use a signed, opaque token in an `HttpOnly`, `SameSite=Lax`, `Secure` production cookie. Legacy bearer sessions are accepted only for compatibility.
+- Session tokens are HMAC-hashed before storage and can be revoked.
+- Passwords use versioned PBKDF2-SHA-256 with 600,000 iterations. Legacy hashes are upgraded after a successful login.
+- Login errors are generic and attempts are rate-limited. For multi-instance production, connect the limiter to a shared edge/Redis store.
+- Server-side permissions and ownership checks protect users, courses, assessments, reports, library resources, and certificates.
+- Certificate scores and eligibility are derived from course, enrollment, and quiz-attempt records; client scores are ignored.
+- Cross-site cookie mutations are rejected using Origin and Fetch Metadata checks.
+
+## Roles
+
+The canonical roles are `super_admin`, `administrator`, `instructor`, `department_manager`, and `learner`. The legacy values `admin`, `tutor`, and `student` remain supported during migration. See [docs/roles-and-permissions.md](docs/roles-and-permissions.md).
+
+## Local setup
+
+Requirements: Node.js 22+, npm, and Git.
 
 ```bash
+copy .env.example .env
 npm install
-npx prisma generate
-npx prisma db push
-npm run db:seed
+npm run db:generate
+npm run db:push:dev
+$env:ALLOW_DEMO_SEED="true" # PowerShell
+npm run db:seed:demo
 npm run dev
 ```
 
-Demo admin account from the full seed:
+Generate a random 32+ character `SESSION_SECRET`. Local SQLite is configured with `DATABASE_URL="file:../db/custom.db"`; local database files are ignored by Git.
 
-```text
-email: admin@gidroedu.uz
-password: Admin@2026
-```
+### Development demo accounts
 
-## Vercel Production
+The idempotent demo seed creates five fictional accounts. They all use the development-only password `MeteoDemo!2026`.
 
-Set these variables in Vercel Project Settings -> Environment Variables for Production, Preview, and Development as needed:
+| Role | Email |
+|---|---|
+| Super administrator | `super.admin@demo.gidroedu.uz` |
+| Administrator | `administrator@demo.gidroedu.uz` |
+| Instructor | `instructor@demo.gidroedu.uz` |
+| Department manager | `manager@demo.gidroedu.uz` |
+| Learner | `learner@demo.gidroedu.uz` |
 
-```text
-DATABASE_URL=postgresql://...
-SESSION_SECRET=<random 32+ character secret>
-NEXT_PUBLIC_APP_URL=https://gidro-met-lms.vercel.app
-```
+Never run the demo seed in production. It exits immediately when `NODE_ENV=production` and also requires `ALLOW_DEMO_SEED=true`.
 
-Optional aliases supported by runtime health checks:
+## Database workflow
 
-```text
-AUTH_SECRET=<random 32+ character secret>
-NEXTAUTH_SECRET=<random 32+ character secret>
-JWT_SECRET=<random 32+ character secret>
-POSTGRES_PRISMA_URL=postgresql://...
-POSTGRES_URL=postgresql://...
-POSTGRES_URL_NON_POOLING=postgresql://...
-```
-
-`DATABASE_URL` must resolve to PostgreSQL in production. Local SQLite URLs are rejected on Vercel to avoid serverless runtime 500s.
-
-The Vercel build command is:
+PostgreSQL is authoritative in production. The local SQLite schema and PostgreSQL schema contain identical models; `npm run db:schema:check` detects drift.
 
 ```bash
-npm run build:vercel
+npm run db:generate                 # local SQLite client
+npm run db:generate:postgres        # production PostgreSQL client
+npm run db:migrate                  # create/review a local migration
+npm run db:migrate:deploy           # apply committed migrations in production
 ```
 
-It validates PostgreSQL env vars, generates Prisma Client with `prisma/schema.postgresql.prisma`, runs `prisma db push`, and builds Next.js.
+Do not use `prisma migrate reset`, `db push --force-reset`, or the demo seed against production. Existing production databases created with `db push` must be baselined before the first `migrate deploy`; follow [docs/deployment.md](docs/deployment.md).
 
-To ensure the admin account exists in an already-initialized production database without deleting data:
+The production-safe initial administrator command creates an account only when it does not already exist and never changes existing credentials:
 
 ```bash
-npm run db:generate:postgres
-npm run db:push:postgres
+$env:INITIAL_ADMIN_EMAIL="admin@example.uz"
+$env:INITIAL_ADMIN_PASSWORD="a-unique-strong-password"
 npm run db:seed:admin
 ```
 
-Do not run `npm run db:seed` against production unless you intentionally want to reset demo data.
+## Quality checks
 
-## Health Check
+```bash
+npm run db:schema:check
+npm run db:generate
+npm run typecheck
+npm run lint
+npm test
+npm run security:audit
+npm run build
+```
 
-`GET /api/health` returns non-sensitive readiness status:
+## Production and deployment
 
-- app status
-- database reachable true/false
-- whether database/session env vars are configured
+The Vercel build command is `npm run build:vercel`. It validates PostgreSQL configuration, verifies schema parity, generates Prisma Client, and builds the application. It deliberately does not mutate the database during the immutable build.
 
-It never returns database URLs, secrets, tokens, or stack traces.
+Apply reviewed migrations as a separate release step:
+
+```bash
+npm ci
+npm run db:generate:postgres
+npm run db:migrate:deploy
+npm run build
+```
+
+For standalone VPS hosting, copy `.next/static` and `public` into the standalone bundle (the build script does this), then start with `npm start`. Reverse proxies must preserve `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
+
+Health/readiness is available at `GET /api/health`. It reports database and required-configuration readiness without returning URLs or secret values.
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Roles and permissions](docs/roles-and-permissions.md)
+- [Deployment and migrations](docs/deployment.md)
+- [Backup and restore](docs/backup-and-restore.md)
+- [User guides](docs/user-guides.md)
+- [Production readiness and known limitations](docs/production-readiness.md)
+
+## Troubleshooting
+
+- `SERVER_CONFIG_ERROR`: configure a 32+ character `SESSION_SECRET`.
+- `DATABASE_URL_NOT_PRODUCTION_READY`: production requires a PostgreSQL URL.
+- `DATABASE_SCHEMA_ERROR`: apply reviewed migrations and re-run the health check.
+- Login loops after an upgrade: clear the legacy `gidroedu_token` local-storage entry and sign in again; new sessions use cookies.
