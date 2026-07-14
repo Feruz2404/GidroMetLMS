@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { logServerEvent } from '@/lib/server-log'
-import { isPostgresUrl, resolveDatabaseConfiguration } from '@/lib/environment'
+import { describeDatabaseConfiguration, isPostgresUrl, resolveDatabaseConfiguration } from '@/lib/environment'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
@@ -41,6 +41,7 @@ export function isDatabaseUrlConfigured(url?: string): boolean {
 
 export function getDatabaseConfigStatus(env = process.env) {
   const database = resolveDatabaseConfiguration(env)
+  const diagnostic = describeDatabaseConfiguration(env)
   const url = database.databaseUrl
 
   return {
@@ -50,6 +51,12 @@ export function getDatabaseConfigStatus(env = process.env) {
     databaseUrlProductionReady: isDatabaseUrlConfigured(url),
     productionRequiresPostgres: true,
     directUrlConfigured: isPostgresDatabaseUrl(database.directUrl),
+    directUrlSource: database.directUrlSource ?? null,
+    databaseProvider: diagnostic.runtime.provider,
+    runtimeConnectionType: diagnostic.runtime.connectionType,
+    migrationConnectionType: diagnostic.migration.connectionType,
+    databaseSslEnabled: diagnostic.runtime.sslEnabled && diagnostic.migration.sslEnabled,
+    sameDatabaseEnvironment: diagnostic.sameEnvironment,
   }
 }
 

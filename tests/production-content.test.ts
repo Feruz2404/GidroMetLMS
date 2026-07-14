@@ -55,13 +55,19 @@ test('production initializer and migration contain no destructive database opera
   const root = path.resolve(import.meta.dirname, '..')
   const initializer = fs.readFileSync(path.join(root, 'prisma', 'init-production-content.ts'), 'utf8')
   const migration = fs.readFileSync(path.join(root, 'prisma', 'migrations', '20260714110000_production_content_models', 'migration.sql'), 'utf8')
-  const combined = `${initializer}\n${migration}`
+  const legacyCopy = fs.readFileSync(path.join(root, 'prisma', 'migrate-legacy-production-data.ts'), 'utf8')
+  const combined = `${initializer}\n${legacyCopy}\n${migration}`
 
   assert.doesNotMatch(initializer, /deleteMany|\$executeRaw|\$queryRawUnsafe|migrate\s+reset|db\s+push/i)
+  assert.doesNotMatch(legacyCopy, /deleteMany|\$executeRaw|\$queryRawUnsafe|\.delete\(|\.update\(|migrate\s+reset|db\s+push/i)
   assert.doesNotMatch(combined, /^\s*(DROP\s|TRUNCATE\s|DELETE\s+FROM\s|ALTER\s+TABLE.+\sDROP\s)/im)
   assert.match(initializer, /ALLOW_PRODUCTION_CONTENT_INIT/)
+  assert.match(initializer, /INIT_ADMIN_PASSWORD/)
   assert.match(initializer, /INIT_INSTRUCTOR_PASSWORD/)
   assert.match(initializer, /INIT_MANAGER_PASSWORD/)
   assert.match(initializer, /INIT_LEARNER_PASSWORD/)
+  assert.match(legacyCopy, /ALLOW_LEGACY_PRODUCTION_MIGRATION/)
+  assert.match(legacyCopy, /createMany/)
+  assert.match(legacyCopy, /skipDuplicates:\s*true/)
   assert.doesNotMatch(initializer, /password\s*[:=]\s*['"][^'"]+['"]/i)
 })

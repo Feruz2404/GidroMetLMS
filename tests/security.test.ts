@@ -15,6 +15,8 @@ import { consumeRateLimit, resetRateLimit } from '../src/lib/rate-limit'
 import { loginSchema, passwordSchema } from '../src/validators/auth'
 import { safeResourceUrl } from '../src/lib/utils'
 import {
+  classifyDatabaseUrl,
+  describeDatabaseConfiguration,
   resolveApplicationUrl,
   resolveDatabaseConfiguration,
   validateDeploymentEnvironment,
@@ -81,8 +83,8 @@ test('preview environment resolves pooled, direct, and dynamic application URLs'
     NODE_ENV: 'production',
     VERCEL_ENV: 'preview',
     VERCEL_URL: 'meteo-preview.example.vercel.app',
-    DATABASE_URL: 'postgresql://pool.example/preview',
-    DATABASE_URL_UNPOOLED: 'postgresql://direct.example/preview',
+    DATABASE_URL: 'postgresql://user:password@ep-preview-abc-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
+    DATABASE_URL_UNPOOLED: 'postgresql://user:password@ep-preview-abc.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
     SESSION_SECRET: 'p'.repeat(48),
   } as NodeJS.ProcessEnv
   const database = resolveDatabaseConfiguration(env)
@@ -90,13 +92,19 @@ test('preview environment resolves pooled, direct, and dynamic application URLs'
   assert.equal(database.directUrlSource, 'DATABASE_URL_UNPOOLED')
   assert.equal(resolveApplicationUrl(env), 'https://meteo-preview.example.vercel.app')
   assert.equal(validateDeploymentEnvironment(env).valid, true)
+  const diagnostic = describeDatabaseConfiguration(env)
+  assert.equal(diagnostic.runtime.provider, 'neon')
+  assert.equal(diagnostic.runtime.connectionType, 'pooled')
+  assert.equal(diagnostic.migration.connectionType, 'direct')
+  assert.equal(diagnostic.sameEnvironment, true)
+  assert.equal(JSON.stringify(diagnostic).includes('password'), false)
 })
 
 test('deployment validation rejects missing direct connections and weak secrets', () => {
   const result = validateDeploymentEnvironment({
     NODE_ENV: 'production',
     VERCEL_ENV: 'production',
-    DATABASE_URL: 'postgresql://pool.example/production',
+    PRODUCTION_NEON_DATABASE_URL: 'postgresql://user:password@ep-production-abc-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
     NEXT_PUBLIC_APP_URL: 'https://meteo-lms.example',
     SESSION_SECRET: 'weak',
   } as NodeJS.ProcessEnv)
@@ -110,12 +118,45 @@ test('preview seeding requires an environment-supplied strong demo password', ()
     NODE_ENV: 'production',
     VERCEL_ENV: 'preview',
     VERCEL_URL: 'meteo-preview.example.vercel.app',
-    DATABASE_URL: 'postgresql://pool.example/preview',
-    DIRECT_URL: 'postgresql://direct.example/preview',
+    DATABASE_URL: 'postgresql://user:password@ep-preview-abc-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
+    DIRECT_URL: 'postgresql://user:password@ep-preview-abc.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
     SESSION_SECRET: 'p'.repeat(48),
     RUN_PREVIEW_SEED: 'true',
   } as NodeJS.ProcessEnv
 
   assert.equal(validateDeploymentEnvironment(baseEnv).valid, false)
   assert.equal(validateDeploymentEnvironment({ ...baseEnv, DEMO_SEED_PASSWORD: 'UniquePreview!2026' }).valid, true)
+})
+
+test('deployment validation rejects Supabase, mixed Neon endpoints, and legacy-only fallbacks', () => {
+  const common = {
+    NODE_ENV: 'production',
+    VERCEL_ENV: 'production',
+    NEXT_PUBLIC_APP_URL: 'https://meteo-lms.example',
+    SESSION_SECRET: 's'.repeat(48),
+  } as NodeJS.ProcessEnv
+  const supabase = validateDeploymentEnvironment({
+    ...common,
+    PRODUCTION_NEON_DATABASE_URL: 'postgresql://user:password@db.example.supabase.co/postgres?sslmode=require',
+    PRODUCTION_NEON_DATABASE_URL_UNPOOLED: 'postgresql://user:password@db.example.supabase.co/postgres?sslmode=require',
+  })
+  assert.equal(supabase.valid, false)
+  assert.equal(supabase.errors.some((message) => message.includes('Neon')), true)
+
+  const mixed = validateDeploymentEnvironment({
+    ...common,
+    PRODUCTION_NEON_DATABASE_URL: 'postgresql://user:password@ep-production-abc-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
+    PRODUCTION_NEON_DATABASE_URL_UNPOOLED: 'postgresql://user:password@ep-other-xyz.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
+  })
+  assert.equal(mixed.valid, false)
+  assert.equal(mixed.errors.some((message) => message.includes('same Neon endpoint')), true)
+
+  const legacyOnly = resolveDatabaseConfiguration({
+    ...common,
+    POSTGRES_PRISMA_URL: 'postgresql://user:password@ep-legacy-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
+    POSTGRES_URL_NON_POOLING: 'postgresql://user:password@ep-legacy.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
+  })
+  assert.equal(legacyOnly.databaseUrl, undefined)
+  assert.equal(legacyOnly.directUrl, undefined)
+  assert.equal(classifyDatabaseUrl('file:./local.db').provider, 'unsupported')
 })

@@ -29,16 +29,29 @@ const env = {
   NEXT_PUBLIC_APP_URL: resolveApplicationUrl(process.env),
 }
 
-console.info(`[vercel-build] Validated isolated ${validation.deploymentEnvironment} PostgreSQL configuration.`)
+console.info(`[vercel-build] Database configuration ${JSON.stringify(validation.diagnostic)}.`)
 run('node', ['scripts/assert-prisma-config.mjs'], env)
 run('npx', ['prisma', 'generate', '--schema=prisma/schema.prisma'], env)
 run('npx', ['prisma', 'migrate', 'deploy', '--schema=prisma/schema.prisma'], env)
 
+if (validation.deploymentEnvironment === 'production' && process.env.ALLOW_LEGACY_PRODUCTION_MIGRATION === 'true') {
+  const legacyUrl = process.env.DATABASE_URL?.trim()
+  if (!legacyUrl || legacyUrl === database.databaseUrl) {
+    console.error('[vercel-build] A distinct legacy DATABASE_URL is required for the guarded Production data migration.')
+    process.exit(1)
+  }
+  run('npx', ['tsx', 'prisma/migrate-legacy-production-data.ts'], {
+    ...env,
+    LEGACY_DATABASE_URL: legacyUrl,
+    ALLOW_LEGACY_PRODUCTION_MIGRATION: 'true',
+  })
+}
+
 if (validation.deploymentEnvironment === 'preview' && process.env.RUN_PREVIEW_SEED === 'true') {
   run('npx', ['tsx', 'prisma/seed.ts'], env)
 }
-if (validation.deploymentEnvironment === 'production' && process.env.RUN_PRODUCTION_INIT === 'true') {
-  run('npx', ['tsx', 'prisma/init-production.ts'], env)
+if (validation.deploymentEnvironment === 'production' && process.env.ALLOW_PRODUCTION_CONTENT_INIT === 'true') {
+  run('npx', ['tsx', 'prisma/init-production-content.ts'], env)
 }
 
 run('npx', ['next', 'build'], env)

@@ -403,6 +403,7 @@ async function main() {
   console.warn(JSON.stringify({ phase: 'before', counts: before }))
 
   await initializeOrganization()
+  await ensureOptionalUser({ id: 'production-initial-admin', email: 'lms.admin@example.com', username: 'lms.initial.admin', role: 'super_admin', firstName: 'Diyor', lastName: 'Rahimov', department: 'Malaka oshirish va ta’lim bo‘limi', position: 'Fictional tizim administratori', passwordVariable: 'INIT_ADMIN_PASSWORD' })
   const optionalInstructor = await ensureOptionalUser({ id: 'production-initial-instructor', email: 'lms.instructor@example.com', username: 'lms.initial.instructor', role: 'instructor', firstName: 'Dilafruz', lastName: 'Karimova', department: 'Malaka oshirish va ta’lim bo‘limi', position: 'Fictional o‘qituvchi', passwordVariable: 'INIT_INSTRUCTOR_PASSWORD' })
   await ensureOptionalUser({ id: 'production-initial-manager', email: 'lms.manager@example.com', username: 'lms.initial.manager', role: 'department_manager', firstName: 'Akmal', lastName: 'Saidov', department: 'Meteorologiya boshqarmasi', position: 'Fictional bo‘lim rahbari', passwordVariable: 'INIT_MANAGER_PASSWORD' })
   await ensureOptionalUser({ id: 'production-initial-learner', email: 'lms.learner@example.com', username: 'lms.initial.learner', role: 'learner', firstName: 'Malika', lastName: 'Tursunova', department: 'Meteorologiya boshqarmasi', position: 'Fictional tinglovchi', passwordVariable: 'INIT_LEARNER_PASSWORD' })

@@ -21,10 +21,12 @@
     "db:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
     "db:migrate:status": "prisma migrate status --schema=prisma/schema.prisma",
     "db:schema:check": "node scripts/assert-prisma-config.mjs && prisma validate --schema=prisma/schema.prisma",
+    "db:diagnose:config": "node scripts/diagnose-database-config.mjs",
     "db:seed:demo": "tsx prisma/seed.ts",
     "db:seed:preview": "tsx prisma/seed.ts",
     "db:seed:admin": "tsx prisma/seed-admin.ts",
     "db:init:production": "tsx prisma/init-production.ts",
+    "db:migrate:legacy-production-data": "tsx prisma/migrate-legacy-production-data.ts",
     "db:inspect:production-content": "tsx prisma/inspect-production-content.ts",
     "db:init:production-content": "tsx prisma/init-production-content.ts",
     "postinstall": "node scripts/prisma-generate.mjs"

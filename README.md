@@ -33,7 +33,7 @@ npm run db:seed:demo
 npm run dev
 ```
 
-Create a development-only PostgreSQL database, configure its pooled `DATABASE_URL` and direct `DIRECT_URL`, and generate a random 32+ character `SESSION_SECRET`. Never reuse Production credentials locally.
+Create a development-only Neon PostgreSQL database, configure its pooled `DATABASE_URL` and matching direct `DIRECT_URL`, and generate a random 32+ character `SESSION_SECRET`. Never reuse Production credentials locally. Vercel Production uses separately scoped `PRODUCTION_NEON_DATABASE_URL` and `PRODUCTION_NEON_DATABASE_URL_UNPOOLED` values supplied by its managed Neon resource.
 
 ### Development demo accounts
 
@@ -86,7 +86,7 @@ npm run build
 
 ## Production and deployment
 
-The Vercel build command is `npm run build:vercel`. It validates the environment without printing secrets, generates Prisma Client from the authoritative schema, applies committed migrations, optionally runs the guarded initializer for the matching environment, and builds the application.
+The Vercel build command is `npm run build:vercel`. It validates matching Neon pooled/direct endpoints without printing secrets, generates Prisma Client from the authoritative schema, applies committed migrations, optionally performs explicitly guarded one-time migration/initialization work, and builds the application.
 
 For an explicit operator-controlled release check:
 
