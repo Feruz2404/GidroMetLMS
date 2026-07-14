@@ -1,4 +1,5 @@
 {
   "framework": "nextjs",
+  "installCommand": "npx --yes npm@10.9.8 ci",
   "buildCommand": "npm run build:vercel"
 }
