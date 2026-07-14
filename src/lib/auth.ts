@@ -2,6 +2,7 @@ import crypto from 'crypto'
 import { db, getPrismaErrorDetails } from '@/lib/db'
 import { logServerError } from '@/lib/server-log'
 import { hasPermission, type Permission } from '@/server/auth/permissions'
+import { resolveApplicationUrl } from '@/lib/environment'
 
 export const SESSION_COOKIE = 'gidroedu_session'
 export const SESSION_TTL_DAYS = 7
@@ -205,7 +206,8 @@ function isTrustedMutation(req?: Request | { headers?: Headers; method?: string;
 
   try {
     const requestUrl = req && 'url' in req && req.url ? new URL(req.url) : null
-    const configuredUrl = process.env.NEXT_PUBLIC_APP_URL ? new URL(process.env.NEXT_PUBLIC_APP_URL) : null
+    const applicationUrl = resolveApplicationUrl()
+    const configuredUrl = applicationUrl ? new URL(applicationUrl) : null
     return origin === requestUrl?.origin || origin === configuredUrl?.origin
   } catch {
     return false

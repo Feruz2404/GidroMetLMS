@@ -1,13 +1,13 @@
-// GidroEdu LMS - Prisma Schema
-// Adapted from TZ v1.0 (PostgreSQL/TypeORM -> SQLite/Prisma)
+// GidroEdu LMS - authoritative PostgreSQL schema
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ============ AUTH MODULE ============
@@ -17,7 +17,7 @@ model User {
   email           String   @unique
   username        String   @unique
   passwordHash    String
-  role            String   @default("student") // admin | tutor | student
+  role            String   @default("learner") // canonical roles are enforced in application permissions
   firstName       String
   lastName        String
   middleName      String?

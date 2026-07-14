@@ -30,7 +30,8 @@ export async function POST(req: NextRequest) {
         status: 'graded',
         quiz: { courseId: { not: null } },
         // No certificate exists for this attemptId
-        // (we'll do a follow-up filter to be safe since SQLite doesn't fully support this relation check)
+        // Keep a follow-up duplicate filter so concurrent eligible attempts cannot
+        // create multiple certificates for the same learner and course.
       },
       include: {
         quiz: {

@@ -2,6 +2,11 @@
   "name": "meteo-lms",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "npm@10.9.8",
+  "engines": {
+    "node": "22.23.x",
+    "npm": "10.9.x"
+  },
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "next build && node scripts/copy-assets.js",
@@ -11,15 +16,16 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "security:audit": "npm audit --omit=dev",
-    "db:push:dev": "prisma db push",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.postgresql.prisma",
-    "db:schema:check": "node scripts/assert-schema-parity.mjs",
+    "db:generate": "prisma generate --schema=prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
+    "db:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
+    "db:migrate:status": "prisma migrate status --schema=prisma/schema.prisma",
+    "db:schema:check": "node scripts/assert-prisma-config.mjs && prisma validate --schema=prisma/schema.prisma",
     "db:seed:demo": "tsx prisma/seed.ts",
-    "db:seed:admin": "npx tsx prisma/seed-admin.ts",
-    "db:generate:postgres": "prisma generate --schema=prisma/schema.postgresql.prisma",
-    "postinstall": "prisma generate"
+    "db:seed:preview": "tsx prisma/seed.ts",
+    "db:seed:admin": "tsx prisma/seed-admin.ts",
+    "db:init:production": "tsx prisma/init-production.ts",
+    "postinstall": "node scripts/prisma-generate.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

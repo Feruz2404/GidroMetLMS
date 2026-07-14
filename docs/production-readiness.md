@@ -17,6 +17,6 @@
 - Assignment submissions, grading, certificate PDF generation/reissue history, password-reset email delivery, OneID, organization tables, attendance, competency, learning groups, and training plans are not yet implemented as complete production workflows.
 - The current page architecture remains a compatibility-preserving single client entry point; gradual extraction to route-based Server Components is recommended.
 - Login rate limiting is process-local. A shared provider is required for horizontally scaled abuse protection.
-- Existing production databases created with `db push` require an operator-reviewed Prisma migration baseline before `migrate deploy` can become the release mechanism.
+- The reviewed Prisma baseline is committed, but an existing production database created with `db push` still requires a verified backup, schema comparison, and `migrate resolve` before its first `migrate deploy`.
 - Uploaded-file storage and malware scanning require an approved object-storage provider; no production upload credentials are included.
 - WCAG and responsive checks need ongoing manual verification with representative authenticated data and assistive technology.

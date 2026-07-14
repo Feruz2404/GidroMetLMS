@@ -22,11 +22,12 @@ Key boundaries:
 - `src/validators`: shared Zod input validation.
 - `src/lib/auth.ts`: password, session, cookie, API response, and audit helpers.
 - `src/lib/db.ts`: the only Prisma client factory.
-- `prisma`: aligned local and production schemas plus development and production-safe initialization scripts.
+- `prisma`: the authoritative PostgreSQL schema, committed migrations, guarded Preview seed, and production-safe initializer.
 
 ## Data rules
 
-- PostgreSQL is authoritative in production; SQLite is for isolated local development.
+- PostgreSQL is authoritative in Development, Preview, and Production through `prisma/schema.prisma`.
+- `DATABASE_URL` is the pooled runtime connection and `DIRECT_URL` is the direct migration connection.
 - Enrollments and lesson progress have compound uniqueness constraints.
 - Sessions store only an HMAC of the opaque browser token.
 - Quiz correct answers are stripped before learner submission; scoring runs on the server.

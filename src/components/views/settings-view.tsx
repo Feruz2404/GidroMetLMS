@@ -231,7 +231,7 @@ export function SettingsView() {
                 <CardContent className="space-y-3 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">{t('settings.version')}:</span><span className="font-mono">1.0.0</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">{t('settings.framework')}:</span><span>Next.js 16</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">{t('settings.database')}:</span><span>SQLite + Prisma</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">{t('settings.database')}:</span><span>PostgreSQL + Prisma</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">{t('settings.environment')}:</span><Badge variant="secondary">{t('settings.development')}</Badge></div>
                 </CardContent>
               </Card>

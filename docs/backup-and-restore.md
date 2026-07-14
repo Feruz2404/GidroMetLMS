@@ -19,4 +19,4 @@ Encrypt backups at rest, restrict access, define retention, and periodically res
 4. Verify login, course progress, quiz attempts, certificates, and `/api/health`.
 5. Record duration, errors, and the recovery point.
 
-Production restore is an operator-controlled incident action and requires an approved maintenance window. Never restore a demo/local SQLite database into production.
+Production restore is an operator-controlled incident action and requires an approved maintenance window. Preview and Production PostgreSQL backups are never interchangeable.

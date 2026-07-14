@@ -108,8 +108,10 @@ function questionSet(courseTitle: string) {
 }
 
 async function main() {
-  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_DEMO_SEED !== 'true') {
-    throw new Error('Demo seed blocked. Use only outside production with ALLOW_DEMO_SEED=true.')
+  const previewAllowed = process.env.VERCEL_ENV === 'preview' && process.env.RUN_PREVIEW_SEED === 'true'
+  const localAllowed = !process.env.VERCEL_ENV && process.env.NODE_ENV !== 'production' && process.env.ALLOW_DEMO_SEED === 'true'
+  if (!previewAllowed && !localAllowed) {
+    throw new Error('Demo seed blocked. Use ALLOW_DEMO_SEED=true locally or RUN_PREVIEW_SEED=true in Vercel Preview.')
   }
 
   const passwordHash = hashPassword(DEMO_PASSWORD)
@@ -235,6 +237,15 @@ async function main() {
     update: { title: 'Demo o‘quv muhiti tayyor', message: 'Siz uchun gidrometeorologiya bo‘yicha demo kurslar biriktirildi.' },
     create: { id: 'demo-notification-welcome', userId: learner.id, type: 'info', title: 'Demo o‘quv muhiti tayyor', message: 'Siz uchun gidrometeorologiya bo‘yicha demo kurslar biriktirildi.', link: 'courses' },
   })
+
+  const demoSettings = [
+    { key: 'platform_name', value: 'GidroEdu LMS Preview' },
+    { key: 'default_language', value: 'uz' },
+    { key: 'demo_content_notice', value: 'Fictional Preview training data; not an official operational instruction.' },
+  ]
+  for (const setting of demoSettings) {
+    await prisma.setting.upsert({ where: { key: setting.key }, update: setting, create: setting })
+  }
 
   console.info(`Demo seed complete: ${USERS.length} users, ${COURSES.length} courses, ${COURSES.length * 9} lessons, ${COURSES.length * 10} questions.`)
 }

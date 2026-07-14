@@ -1,15 +1,9 @@
 import { spawnSync } from 'node:child_process'
-
-const schema = 'prisma/schema.postgresql.prisma'
-const candidates = ['DATABASE_URL', 'POSTGRES_PRISMA_URL', 'POSTGRES_URL', 'POSTGRES_URL_NON_POOLING']
-
-function resolveDatabase() {
-  for (const key of candidates) {
-    const value = process.env[key]?.trim()
-    if (value) return { key, value }
-  }
-  return {}
-}
+import {
+  resolveApplicationUrl,
+  resolveDatabaseConfiguration,
+  validateDeploymentEnvironment,
+} from '../src/lib/environment.js'
 
 function run(command, args, env) {
   console.info(`[vercel-build] ${command} ${args.join(' ')}`)
@@ -21,19 +15,31 @@ function run(command, args, env) {
   if (result.status !== 0) process.exit(result.status ?? 1)
 }
 
-const database = resolveDatabase()
-if (!database.value || !/^postgres(?:ql)?:\/\//i.test(database.value)) {
-  console.error('[vercel-build] A PostgreSQL DATABASE_URL is required.')
+const validation = validateDeploymentEnvironment(process.env)
+if (!validation.valid) {
+  for (const message of validation.errors) console.error(`[vercel-build] ${message}.`)
   process.exit(1)
 }
 
-const env = { ...process.env, DATABASE_URL: database.value }
-console.info(`[vercel-build] PostgreSQL configured from ${database.key}.`)
-run('node', ['scripts/assert-schema-parity.mjs'], env)
-run('npx', ['prisma', 'generate', `--schema=${schema}`], env)
+const database = resolveDatabaseConfiguration(process.env)
+const env = {
+  ...process.env,
+  DATABASE_URL: database.databaseUrl,
+  DIRECT_URL: database.directUrl,
+  NEXT_PUBLIC_APP_URL: resolveApplicationUrl(process.env),
+}
 
-// Database changes are intentionally not applied during an immutable build.
-// The deployment workflow must run `npm run db:migrate:deploy` as a separate,
-// auditable release step before routing traffic to the new version.
+console.info(`[vercel-build] Validated isolated ${validation.deploymentEnvironment} PostgreSQL configuration.`)
+run('node', ['scripts/assert-prisma-config.mjs'], env)
+run('npx', ['prisma', 'generate', '--schema=prisma/schema.prisma'], env)
+run('npx', ['prisma', 'migrate', 'deploy', '--schema=prisma/schema.prisma'], env)
+
+if (validation.deploymentEnvironment === 'preview' && process.env.RUN_PREVIEW_SEED === 'true') {
+  run('npx', ['tsx', 'prisma/seed.ts'], env)
+}
+if (validation.deploymentEnvironment === 'production' && process.env.RUN_PRODUCTION_INIT === 'true') {
+  run('npx', ['tsx', 'prisma/init-production.ts'], env)
+}
+
 run('npx', ['next', 'build'], env)
 run('node', ['scripts/copy-assets.js'], env)

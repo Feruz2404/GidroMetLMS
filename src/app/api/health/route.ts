@@ -1,10 +1,13 @@
 import { db, getDatabaseConfigStatus, getPrismaErrorDetails } from '@/lib/db'
 import { isSessionSecretConfigured } from '@/lib/auth'
 import { logServerError } from '@/lib/server-log'
+import { getDeploymentEnvironment, resolveApplicationUrl } from '@/lib/environment'
 
 export async function GET() {
   const databaseConfig = getDatabaseConfigStatus()
   const sessionSecretConfigured = isSessionSecretConfigured()
+  const deploymentEnvironment = getDeploymentEnvironment()
+  const applicationUrlConfigured = Boolean(resolveApplicationUrl())
   let databaseReachable = false
   let databaseErrorCode: string | null = null
 
@@ -29,6 +32,7 @@ export async function GET() {
     databaseConfig.databaseUrlSupported &&
     (!databaseConfig.productionRequiresPostgres || databaseConfig.databaseUrlProductionReady) &&
     sessionSecretConfigured &&
+    applicationUrlConfigured &&
     databaseReachable
 
   const response = Response.json(
@@ -46,6 +50,8 @@ export async function GET() {
           productionRequiresPostgres: databaseConfig.productionRequiresPostgres,
           directUrlConfigured: databaseConfig.directUrlConfigured,
           sessionSecretConfigured,
+          applicationUrlConfigured,
+          deploymentEnvironment,
         },
       },
       timestamp: new Date().toISOString(),

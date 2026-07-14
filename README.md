@@ -2,7 +2,7 @@
 
 GidroEdu LMS is a multilingual professional-development platform for hydrometeorology specialists. It supports role-aware dashboards, courses and lessons, secure assessments, a digital library, certificate issuance and public verification, notifications, and operational reports.
 
-The repository is a Next.js 16 App Router application using React 19, TypeScript, Tailwind CSS, Prisma, SQLite for isolated local development, and PostgreSQL as the authoritative production database.
+The repository is a Next.js 16 App Router application using React 19, TypeScript, Tailwind CSS, Prisma, and one authoritative PostgreSQL schema in every environment.
 
 ## Security model
 
@@ -20,19 +20,19 @@ The canonical roles are `super_admin`, `administrator`, `instructor`, `departmen
 
 ## Local setup
 
-Requirements: Node.js 22+, npm, and Git.
+Requirements: Node.js 22.23.x, npm 10.9.x, PostgreSQL, and Git. The exact versions are pinned in `.nvmrc`, `.node-version`, and `package.json`.
 
 ```bash
 copy .env.example .env
 npm install
 npm run db:generate
-npm run db:push:dev
+npm run db:migrate:deploy
 $env:ALLOW_DEMO_SEED="true" # PowerShell
 npm run db:seed:demo
 npm run dev
 ```
 
-Generate a random 32+ character `SESSION_SECRET`. Local SQLite is configured with `DATABASE_URL="file:../db/custom.db"`; local database files are ignored by Git.
+Create a development-only PostgreSQL database, configure its pooled `DATABASE_URL` and direct `DIRECT_URL`, and generate a random 32+ character `SESSION_SECRET`. Never reuse Production credentials locally.
 
 ### Development demo accounts
 
@@ -50,16 +50,16 @@ Never run the demo seed in production. It exits immediately when `NODE_ENV=produ
 
 ## Database workflow
 
-PostgreSQL is authoritative in production. The local SQLite schema and PostgreSQL schema contain identical models; `npm run db:schema:check` detects drift.
+`prisma/schema.prisma` is the only authoritative schema. It uses PostgreSQL, a pooled runtime URL, and a direct migration URL. `npm run db:schema:check` rejects provider drift and validates the schema.
 
 ```bash
-npm run db:generate                 # local SQLite client
-npm run db:generate:postgres        # production PostgreSQL client
+npm run db:generate                 # generate the PostgreSQL client
 npm run db:migrate                  # create/review a local migration
-npm run db:migrate:deploy           # apply committed migrations in production
+npm run db:migrate:deploy           # apply committed migrations
+npm run db:migrate:status           # inspect migration state
 ```
 
-Do not use `prisma migrate reset`, `db push --force-reset`, or the demo seed against production. Existing production databases created with `db push` must be baselined before the first `migrate deploy`; follow [docs/deployment.md](docs/deployment.md).
+Do not use `prisma migrate reset`, `db push`, or the demo seed against Production. Existing databases created with `db push` must be backed up, compared with the baseline, and marked with the documented baseline before the first `migrate deploy`; follow [docs/deployment.md](docs/deployment.md).
 
 The production-safe initial administrator command creates an account only when it does not already exist and never changes existing credentials:
 
@@ -83,13 +83,13 @@ npm run build
 
 ## Production and deployment
 
-The Vercel build command is `npm run build:vercel`. It validates PostgreSQL configuration, verifies schema parity, generates Prisma Client, and builds the application. It deliberately does not mutate the database during the immutable build.
+The Vercel build command is `npm run build:vercel`. It validates the environment without printing secrets, generates Prisma Client from the authoritative schema, applies committed migrations, optionally runs the guarded initializer for the matching environment, and builds the application.
 
-Apply reviewed migrations as a separate release step:
+For an explicit operator-controlled release check:
 
 ```bash
 npm ci
-npm run db:generate:postgres
+npm run db:generate
 npm run db:migrate:deploy
 npm run build
 ```

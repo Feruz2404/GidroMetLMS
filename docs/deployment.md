@@ -10,11 +10,15 @@
 
 ## Vercel
 
-Use `npm run build:vercel`. The build is read-only with respect to the database. Run migrations in an authenticated CI release job or an explicit operator step before promoting the deployment:
+Use `npm run build:vercel`. It validates non-secret configuration, generates the PostgreSQL client, runs `prisma migrate deploy`, optionally performs the explicitly enabled environment initializer, and then builds Next.js.
+
+Preview uses a dedicated PostgreSQL resource connected only to the Vercel Preview target. Configure `RUN_PREVIEW_SEED=true` to run the repeatable fictional dataset after migrations. Production never receives that dataset. `RUN_PRODUCTION_INIT=true` enables only the idempotent essential-record initializer.
+
+The same release sequence can be run explicitly by an authenticated operator:
 
 ```bash
 npm ci
-npm run db:generate:postgres
+npm run db:generate
 npm run db:migrate:deploy
 ```
 
@@ -27,7 +31,7 @@ The current production database was historically managed with `db push`. Before 
 1. Take and verify a PostgreSQL backup.
 2. Generate/review the baseline SQL against a disposable copy.
 3. Confirm the live schema matches the baseline.
-4. Mark the baseline migration as applied with `prisma migrate resolve --applied <baseline-name> --schema=prisma/schema.postgresql.prisma`.
+4. Mark the reviewed baseline as applied with `prisma migrate resolve --applied 20260714090000_baseline --schema=prisma/schema.prisma`.
 5. Run `npm run db:migrate:deploy` and verify `/api/health`.
 
 Never run `migrate reset`, a force reset, or the demo seed.
@@ -36,7 +40,7 @@ Never run `migrate reset`, a force reset, or the demo seed.
 
 ```bash
 npm ci
-npm run db:generate:postgres
+npm run db:generate
 npm run db:migrate:deploy
 npm run build
 npm start
