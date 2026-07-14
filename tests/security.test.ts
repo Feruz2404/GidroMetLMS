@@ -104,3 +104,18 @@ test('deployment validation rejects missing direct connections and weak secrets'
   assert.equal(result.errors.some((message) => message.includes('DIRECT_URL')), true)
   assert.equal(result.errors.some((message) => message.includes('SESSION_SECRET')), true)
 })
+
+test('preview seeding requires an environment-supplied strong demo password', () => {
+  const baseEnv = {
+    NODE_ENV: 'production',
+    VERCEL_ENV: 'preview',
+    VERCEL_URL: 'meteo-preview.example.vercel.app',
+    DATABASE_URL: 'postgresql://pool.example/preview',
+    DIRECT_URL: 'postgresql://direct.example/preview',
+    SESSION_SECRET: 'p'.repeat(48),
+    RUN_PREVIEW_SEED: 'true',
+  } as NodeJS.ProcessEnv
+
+  assert.equal(validateDeploymentEnvironment(baseEnv).valid, false)
+  assert.equal(validateDeploymentEnvironment({ ...baseEnv, DEMO_SEED_PASSWORD: 'UniquePreview!2026' }).valid, true)
+})

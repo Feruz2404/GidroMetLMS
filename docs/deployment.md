@@ -12,7 +12,7 @@
 
 Use `npm run build:vercel`. It validates non-secret configuration, generates the PostgreSQL client, runs `prisma migrate deploy`, optionally performs the explicitly enabled environment initializer, and then builds Next.js.
 
-Preview uses a dedicated PostgreSQL resource connected only to the Vercel Preview target. Configure `RUN_PREVIEW_SEED=true` to run the repeatable fictional dataset after migrations. Production never receives that dataset. `RUN_PRODUCTION_INIT=true` enables only the idempotent essential-record initializer.
+Preview uses a dedicated PostgreSQL resource connected only to the Vercel Preview target. Configure `RUN_PREVIEW_SEED=true` and a strong, secret `DEMO_SEED_PASSWORD` to run the repeatable fictional dataset after migrations. Production never receives that dataset. `RUN_PRODUCTION_INIT=true` enables only the idempotent essential-record initializer.
 
 The same release sequence can be run explicitly by an authenticated operator:
 

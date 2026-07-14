@@ -13,6 +13,18 @@ export function isPostgresUrl(value) {
   return Boolean(value && /^postgres(?:ql)?:\/\//i.test(value.trim()))
 }
 
+function isStrongPassword(value) {
+  return Boolean(
+    typeof value === 'string' &&
+      value.length >= 12 &&
+      value.length <= 256 &&
+      /[a-z]/.test(value) &&
+      /[A-Z]/.test(value) &&
+      /[0-9]/.test(value) &&
+      /[^A-Za-z0-9]/.test(value)
+  )
+}
+
 export function getDeploymentEnvironment(env = process.env) {
   if (env.VERCEL_ENV === 'preview') return 'preview'
   if (env.VERCEL_ENV === 'production') return 'production'
@@ -56,6 +68,9 @@ export function validateDeploymentEnvironment(env = process.env) {
   if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) errors.push('SESSION_SECRET must contain at least 32 characters')
   if (!resolveApplicationUrl(env)) errors.push('NEXT_PUBLIC_APP_URL or a Vercel deployment URL is required')
   if (!['preview', 'production'].includes(deploymentEnvironment)) errors.push('VERCEL_ENV must be preview or production')
+  if (deploymentEnvironment === 'preview' && env.RUN_PREVIEW_SEED === 'true' && !isStrongPassword(env.DEMO_SEED_PASSWORD)) {
+    errors.push('DEMO_SEED_PASSWORD must be a strong password when RUN_PREVIEW_SEED=true')
+  }
 
   return { valid: errors.length === 0, errors, deploymentEnvironment, ...database }
 }

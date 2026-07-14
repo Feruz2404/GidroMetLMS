@@ -28,6 +28,7 @@ npm install
 npm run db:generate
 npm run db:migrate:deploy
 $env:ALLOW_DEMO_SEED="true" # PowerShell
+$env:DEMO_SEED_PASSWORD="<unique-strong-development-password>"
 npm run db:seed:demo
 npm run dev
 ```
@@ -36,7 +37,7 @@ Create a development-only PostgreSQL database, configure its pooled `DATABASE_UR
 
 ### Development demo accounts
 
-The idempotent demo seed creates five fictional accounts. They all use the development-only password `MeteoDemo!2026`.
+The idempotent demo seed creates five fictional accounts. They use the strong, environment-specific `DEMO_SEED_PASSWORD`; no demo credential is stored in source control.
 
 | Role | Email |
 |---|---|
@@ -46,7 +47,7 @@ The idempotent demo seed creates five fictional accounts. They all use the devel
 | Department manager | `manager@demo.gidroedu.uz` |
 | Learner | `learner@demo.gidroedu.uz` |
 
-Never run the demo seed in production. It exits immediately when `NODE_ENV=production` and also requires `ALLOW_DEMO_SEED=true`.
+Never run the demo seed in production. It requires `ALLOW_DEMO_SEED=true` locally or `RUN_PREVIEW_SEED=true` on Vercel Preview, plus `DEMO_SEED_PASSWORD`; its environment guard rejects Production.
 
 ## Database workflow
 

@@ -1,9 +1,8 @@
 import { PrismaClient } from '@prisma/client'
 import { hashPassword } from '../src/lib/auth'
+import { passwordSchema } from '../src/validators/auth'
 
 const prisma = new PrismaClient()
-
-const DEMO_PASSWORD = 'MeteoDemo!2026'
 
 const USERS = [
   { id: 'demo-user-super-admin', email: 'super.admin@demo.gidroedu.uz', username: 'demo.superadmin', role: 'super_admin', firstName: 'Kamola', lastName: 'Nurmatova', department: 'Raqamli rivojlanish', position: 'Bosh administrator' },
@@ -114,7 +113,12 @@ async function main() {
     throw new Error('Demo seed blocked. Use ALLOW_DEMO_SEED=true locally or RUN_PREVIEW_SEED=true in Vercel Preview.')
   }
 
-  const passwordHash = hashPassword(DEMO_PASSWORD)
+  const demoPassword = passwordSchema.safeParse(process.env.DEMO_SEED_PASSWORD)
+  if (!demoPassword.success) {
+    throw new Error('DEMO_SEED_PASSWORD must be configured with a strong, environment-specific password.')
+  }
+
+  const passwordHash = hashPassword(demoPassword.data)
   for (const user of USERS) {
     await prisma.user.upsert({
       where: { email: user.email },
