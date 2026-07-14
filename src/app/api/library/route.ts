@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
       return err(400, 'Sarlavha kamida 3 ta belgidan iborat bo\'lishi kerak')
     }
 
-    const validTypes = ['book', 'article', 'video', 'audio', 'document', 'normative']
+    const validTypes = ['book', 'article', 'video', 'audio', 'document', 'manual', 'presentation', 'normative']
     const finalType = validTypes.includes(type as string) ? (type as string) : 'book'
 
     const resource = await db.libraryResource.create({

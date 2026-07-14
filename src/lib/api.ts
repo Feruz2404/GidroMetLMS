@@ -155,6 +155,7 @@ export interface User {
   department?: string | null
   position?: string | null
   isActive: boolean
+  mustChangePassword?: boolean
   lastLoginAt?: string | null
   createdAt: string
 }

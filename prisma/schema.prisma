@@ -13,32 +13,33 @@ datasource db {
 // ============ AUTH MODULE ============
 
 model User {
-  id              String   @id @default(cuid())
-  email           String   @unique
-  username        String   @unique
-  passwordHash    String
-  role            String   @default("learner") // canonical roles are enforced in application permissions
-  firstName       String
-  lastName        String
-  middleName      String?
-  phone           String?
-  avatarUrl       String?
-  department      String?
-  position        String?
-  isActive        Boolean  @default(true)
-  lastLoginAt     DateTime?
-  emailVerifiedAt DateTime?
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  username           String    @unique
+  passwordHash       String
+  role               String    @default("learner") // canonical roles are enforced in application permissions
+  firstName          String
+  lastName           String
+  middleName         String?
+  phone              String?
+  avatarUrl          String?
+  department         String?
+  position           String?
+  isActive           Boolean   @default(true)
+  mustChangePassword Boolean   @default(false)
+  lastLoginAt        DateTime?
+  emailVerifiedAt    DateTime?
   // OneID integration (TZ section 4): external ID from sso.egov.uz
   // NULLABLE — set when user logs in via OneID OAuth2
-  oneidPin        String?  @unique
-  externalId      String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  oneidPin           String?   @unique
+  externalId         String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   // Relations
   sessions          UserSession[]
-  createdCourses    Course[]        @relation("CourseCreator")
-  tutoredCourses    Course[]        @relation("CourseTutor")
+  createdCourses    Course[]           @relation("CourseCreator")
+  tutoredCourses    Course[]           @relation("CourseTutor")
   enrollments       Enrollment[]
   lessonProgress    LessonProgress[]
   quizAttempts      QuizAttempt[]
@@ -48,20 +49,20 @@ model User {
   certificates      Certificate[]
   notifications     Notification[]
   activityLogs      ActivityLog[]
-  createdResources  LibraryResource[] @relation("ResourceUploader")
-  createdQuizzes    Quiz[]            @relation("QuizCreator")
+  createdResources  LibraryResource[]  @relation("ResourceUploader")
+  createdQuizzes    Quiz[]             @relation("QuizCreator")
 
   @@index([role])
 }
 
 model UserSession {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   userId       String
-  refreshToken String   @unique
+  refreshToken String    @unique
   deviceInfo   String?
   ipAddress    String?
   expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  createdAt    DateTime  @default(now())
   revokedAt    DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -92,18 +93,67 @@ model Setting {
   value String
 }
 
+model Department {
+  id          String   @id
+  code        String   @unique
+  nameUz      String
+  nameRu      String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+model RegionalDivision {
+  id          String   @id
+  code        String   @unique
+  nameUz      String
+  nameRu      String?
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive])
+}
+
+model RoleDefinition {
+  id          String           @id
+  key         String           @unique
+  nameUz      String
+  description String?
+  isActive    Boolean          @default(true)
+  permissions RolePermission[]
+}
+
+model RolePermission {
+  id         String @id
+  roleId     String
+  permission String
+
+  role RoleDefinition @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permission])
+  @@index([permission])
+}
+
 // ============ STUDY MODULE ============
 
 model Category {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  description String?
-  parentId    String?
-  icon        String?
-  order       Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  name          String
+  nameRu        String?
+  slug          String   @unique
+  description   String?
+  descriptionRu String?
+  parentId      String?
+  icon          String?
+  order         Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id])
   children Category[] @relation("CategoryTree")
@@ -111,24 +161,32 @@ model Category {
 }
 
 model Course {
-  id                  String   @id @default(cuid())
-  title               String
-  description         String?
-  slug                String   @unique
-  categoryId          String?
-  tutorId             String?
-  thumbnailUrl        String?
-  durationHours       Int      @default(0)
-  level               String   @default("beginner") // beginner | intermediate | advanced
-  status              String   @default("draft") // draft | published | archived
-  isMandatory         Boolean  @default(false)
-  passPercentage      Int      @default(70)
-  maxAttempts         Int      @default(3)
-  validDays           Int?
-  createdBy           String
-  publishedAt         DateTime?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
+  id                    String    @id @default(cuid())
+  title                 String
+  titleRu               String?
+  description           String?
+  shortSummary          String?
+  targetAudience        String?
+  learningOutcomes      String?
+  prerequisites         String?
+  language              String    @default("uz")
+  certificateEnabled    Boolean   @default(true)
+  generalTrainingNotice String?
+  slug                  String    @unique
+  categoryId            String?
+  tutorId               String?
+  thumbnailUrl          String?
+  durationHours         Int       @default(0)
+  level                 String    @default("beginner") // beginner | intermediate | advanced
+  status                String    @default("draft") // draft | published | archived
+  isMandatory           Boolean   @default(false)
+  passPercentage        Int       @default(70)
+  maxAttempts           Int       @default(3)
+  validDays             Int?
+  createdBy             String
+  publishedAt           DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   category     Category?     @relation(fields: [categoryId], references: [id])
   tutor        User?         @relation("CourseTutor", fields: [tutorId], references: [id])
@@ -161,7 +219,7 @@ model Section {
 
 model Lesson {
   id          String   @id @default(cuid())
-  courseId     String
+  courseId    String
   sectionId   String?
   title       String
   description String?
@@ -184,14 +242,14 @@ model Lesson {
 }
 
 model Enrollment {
-  id         String   @id @default(cuid())
+  id          String    @id @default(cuid())
   courseId    String
-  userId     String
-  status     String   @default("active") // active | completed | dropped
-  progress   Int      @default(0) // percentage 0-100
-  startedAt  DateTime @default(now())
+  userId      String
+  status      String    @default("active") // active | completed | dropped
+  progress    Int       @default(0) // percentage 0-100
+  startedAt   DateTime  @default(now())
   completedAt DateTime?
-  deadlineAt DateTime?
+  deadlineAt  DateTime?
 
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -201,14 +259,14 @@ model Enrollment {
 }
 
 model LessonProgress {
-  id           String   @id @default(cuid())
+  id           String    @id @default(cuid())
   lessonId     String
   userId       String
-  isCompleted  Boolean  @default(false)
-  watchTimeSec Int      @default(0)
-  lastPosition Int      @default(0)
+  isCompleted  Boolean   @default(false)
+  watchTimeSec Int       @default(0)
+  lastPosition Int       @default(0)
   completedAt  DateTime?
-  updatedAt    DateTime @updatedAt
+  updatedAt    DateTime  @updatedAt
 
   lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -220,20 +278,20 @@ model LessonProgress {
 // ============ TEST MODULE ============
 
 model Quiz {
-  id            String   @id @default(cuid())
-  title         String
-  description   String?
-  courseId       String?
-  lessonId      String?
-  timeLimitMin  Int      @default(30)
-  passingScore  Int      @default(70)
-  maxAttempts   Int      @default(3)
-  shuffleQuestions Boolean @default(false)
-  showAnswers   Boolean  @default(false)
-  status        String   @default("draft") // draft | published
-  createdBy     String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               String   @id @default(cuid())
+  title            String
+  description      String?
+  courseId         String?
+  lessonId         String?
+  timeLimitMin     Int      @default(30)
+  passingScore     Int      @default(70)
+  maxAttempts      Int      @default(3)
+  shuffleQuestions Boolean  @default(false)
+  showAnswers      Boolean  @default(false)
+  status           String   @default("draft") // draft | published
+  createdBy        String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   course    Course?       @relation(fields: [courseId], references: [id])
   creator   User          @relation("QuizCreator", fields: [createdBy], references: [id])
@@ -273,17 +331,17 @@ model AnswerOption {
 }
 
 model QuizAttempt {
-  id         String   @id @default(cuid())
-  quizId     String
-  userId     String
-  status     String   @default("in_progress") // in_progress | submitted | graded
-  score      Int      @default(0)
-  maxScore   Int      @default(0)
-  percentage Int      @default(0)
-  passed     Boolean  @default(false)
-  startedAt  DateTime @default(now())
-  submittedAt DateTime?
-  timeSpentSec Int    @default(0)
+  id           String    @id @default(cuid())
+  quizId       String
+  userId       String
+  status       String    @default("in_progress") // in_progress | submitted | graded
+  score        Int       @default(0)
+  maxScore     Int       @default(0)
+  percentage   Int       @default(0)
+  passed       Boolean   @default(false)
+  startedAt    DateTime  @default(now())
+  submittedAt  DateTime?
+  timeSpentSec Int       @default(0)
 
   quiz    Quiz         @relation(fields: [quizId], references: [id], onDelete: Cascade)
   user    User         @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -294,14 +352,14 @@ model QuizAttempt {
 }
 
 model QuizAnswer {
-  id           String  @id @default(cuid())
-  attemptId    String
-  questionId   String
-  userId       String
+  id              String  @id @default(cuid())
+  attemptId       String
+  questionId      String
+  userId          String
   selectedOptions String? // JSON array of option IDs
-  textAnswer   String?
-  isCorrect    Boolean @default(false)
-  pointsAwarded Int    @default(0)
+  textAnswer      String?
+  isCorrect       Boolean @default(false)
+  pointsAwarded   Int     @default(0)
 
   attempt  QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -314,29 +372,30 @@ model QuizAnswer {
 // ============ LIBRARY MODULE ============
 
 model LibraryResource {
-  id          String   @id @default(cuid())
-  title       String
-  description String?
-  type        String   @default("book") // book | article | video | audio | document | normative
-  category    String?
-  author      String?
-  publisher   String?
-  year        Int?
-  language    String   @default("uz")
-  pages       Int?
-  fileUrl     String?
-  fileSize    Int      @default(0)
-  fileType    String?  // pdf, docx, mp4...
-  coverUrl    String?
-  tags        String?  // comma-separated
-  downloadCount Int    @default(0)
-  viewCount   Int      @default(0)
-  uploadedBy  String
-  status      String   @default("active") // active | archived
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  slug          String?  @unique
+  title         String
+  description   String?
+  type          String   @default("book") // book | article | video | audio | document | normative
+  category      String?
+  author        String?
+  publisher     String?
+  year          Int?
+  language      String   @default("uz")
+  pages         Int?
+  fileUrl       String?
+  fileSize      Int      @default(0)
+  fileType      String? // pdf, docx, mp4...
+  coverUrl      String?
+  tags          String? // comma-separated
+  downloadCount Int      @default(0)
+  viewCount     Int      @default(0)
+  uploadedBy    String
+  status        String   @default("active") // active | archived
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  uploader  User                @relation("ResourceUploader", fields: [uploadedBy], references: [id])
+  uploader  User               @relation("ResourceUploader", fields: [uploadedBy], references: [id])
   downloads ResourceDownload[]
   bookmarks ResourceBookmark[]
 
@@ -345,10 +404,10 @@ model LibraryResource {
 }
 
 model ResourceDownload {
-  id        String   @id @default(cuid())
+  id         String   @id @default(cuid())
   resourceId String
-  userId    String
-  createdAt DateTime @default(now())
+  userId     String
+  createdAt  DateTime @default(now())
 
   resource LibraryResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -358,10 +417,10 @@ model ResourceDownload {
 }
 
 model ResourceBookmark {
-  id        String   @id @default(cuid())
+  id         String   @id @default(cuid())
   resourceId String
-  userId    String
-  createdAt DateTime @default(now())
+  userId     String
+  createdAt  DateTime @default(now())
 
   resource LibraryResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
   user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -373,38 +432,38 @@ model ResourceBookmark {
 // ============ CERTIFICATE MODULE ============
 
 model CertificateTemplate {
-  id           String  @id @default(cuid())
+  id           String   @id @default(cuid())
   name         String
-  titleText    String  @default("SERTIFIKAT")
+  titleText    String   @default("SERTIFIKAT")
   bodyText     String?
   signerName   String?
   signerTitle  String?
-  primaryColor String  @default("#0f766e")
-  accentColor  String  @default("#ca8a04")
-  isActive     Boolean @default(true)
+  primaryColor String   @default("#0f766e")
+  accentColor  String   @default("#ca8a04")
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
 
   certificates Certificate[]
 }
 
 model Certificate {
-  id            String   @id @default(cuid())
-  certNumber    String   @unique
-  userId        String
-  courseId       String
-  templateId    String?
-  attemptId     String?
-  score         Int
-  maxScore      Int
-  percentage    Int
-  issuedAt      DateTime @default(now())
-  validUntil    DateTime?
-  status        String   @default("active") // active | revoked
-  verifyHash    String   @unique
-  createdAt     DateTime @default(now())
+  id         String    @id @default(cuid())
+  certNumber String    @unique
+  userId     String
+  courseId   String
+  templateId String?
+  attemptId  String?
+  score      Int
+  maxScore   Int
+  percentage Int
+  issuedAt   DateTime  @default(now())
+  validUntil DateTime?
+  status     String    @default("active") // active | revoked
+  verifyHash String    @unique
+  createdAt  DateTime  @default(now())
 
-  user     User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  course   Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course   Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
   template CertificateTemplate? @relation(fields: [templateId], references: [id])
 
   @@index([userId])
@@ -416,6 +475,7 @@ model Certificate {
 model Notification {
   id        String   @id @default(cuid())
   userId    String
+  eventKey  String?
   type      String   @default("info") // info | success | warning | error
   title     String
   message   String
@@ -425,6 +485,24 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, eventKey])
   @@index([userId])
   @@index([isRead])
+}
+
+model Announcement {
+  id          String   @id
+  eventKey    String   @unique
+  titleUz     String
+  titleRu     String?
+  messageUz   String
+  messageRu   String?
+  type        String   @default("info")
+  link        String?
+  isActive    Boolean  @default(true)
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([isActive, publishedAt])
 }

@@ -60,13 +60,14 @@ export function SettingsView() {
       toast({ title: t('settings.error'), description: t('settings.passwordMismatch'), variant: 'destructive' })
       return
     }
-    if (passwords.next.length < 6) {
+    if (passwords.next.length < 12) {
       toast({ title: t('settings.error'), description: t('settings.passwordTooShort'), variant: 'destructive' })
       return
     }
     setPasswordLoading(true)
     try {
       await api.patch('/auth/me', { password: passwords.next, currentPassword: passwords.current })
+      updateUser({ mustChangePassword: false })
       setPasswords({ current: '', next: '', confirm: '' })
       toast({ title: t('settings.passwordChanged'), description: t('settings.passwordSet') })
     } catch {
@@ -90,7 +91,15 @@ export function SettingsView() {
         <p className="text-muted-foreground">{t('settings.subtitle')}</p>
       </div>
 
-      <Tabs defaultValue="profile">
+      {user.mustChangePassword && (
+        <Card className="max-w-2xl border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+          <CardContent className="p-4 text-sm text-amber-900 dark:text-amber-100">
+            Hisob xavfsizligi uchun vaqtinchalik parolni davom etishdan oldin o‘zgartiring.
+          </CardContent>
+        </Card>
+      )}
+
+      <Tabs defaultValue={user.mustChangePassword ? 'password' : 'profile'}>
         <TabsList className="flex flex-wrap h-auto">
           <TabsTrigger value="profile"><User className="w-4 h-4 mr-2" /> {t('settings.tab.profile')}</TabsTrigger>
           <TabsTrigger value="password"><Lock className="w-4 h-4 mr-2" /> {t('settings.tab.password')}</TabsTrigger>
@@ -175,7 +184,7 @@ export function SettingsView() {
                 </div>
                 <div className="space-y-2">
                   <Label>{t('settings.newPassword')}</Label>
-                  <Input type="password" value={passwords.next} onChange={(e) => setPasswords({ ...passwords, next: e.target.value })} required minLength={6} />
+                  <Input type="password" value={passwords.next} onChange={(e) => setPasswords({ ...passwords, next: e.target.value })} required minLength={12} />
                 </div>
                 <div className="space-y-2">
                   <Label>{t('settings.confirmPassword')}</Label>

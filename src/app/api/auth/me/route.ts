@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
       department: user.department,
       position: user.position,
       isActive: user.isActive,
+      mustChangePassword: user.mustChangePassword,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
     })
@@ -71,7 +72,7 @@ export async function PATCH(req: NextRequest) {
         ...(middleName !== undefined && { middleName }),
         ...(phone !== undefined && { phone }),
         ...(avatarUrl !== undefined && { avatarUrl }),
-        ...(password !== undefined && { passwordHash: hashPassword(password) }),
+        ...(password !== undefined && { passwordHash: hashPassword(password), mustChangePassword: false }),
       },
     })
 
@@ -87,6 +88,7 @@ export async function PATCH(req: NextRequest) {
       avatarUrl: updated.avatarUrl,
       department: updated.department,
       position: updated.position,
+      mustChangePassword: updated.mustChangePassword,
     })
   } catch (e) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {

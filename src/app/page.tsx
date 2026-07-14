@@ -77,21 +77,23 @@ export default function Home() {
     return <LoginView />
   }
 
+  const effectiveView = user.mustChangePassword ? 'settings' : view
+
   return (
     <AppShell>
-      {view === 'dashboard' && <DashboardView />}
-      {view === 'courses' && <CoursesView />}
-      {view === 'course-detail' && <CourseDetailView />}
-      {view === 'quizzes' && <QuizzesView />}
-      {view === 'quiz-taking' && <QuizTakingView />}
-      {view === 'library' && <LibraryView />}
-      {view === 'library-detail' && <LibraryDetailView />}
-      {view === 'certificates' && <CertificatesView />}
-      {view === 'certificate-verify' && <CertificateVerifyView />}
-      {view === 'reports' && <ReportsView />}
-      {view === 'users' && <UsersView />}
-      {view === 'settings' && <SettingsView />}
-      {view === 'notifications' && <NotificationsView />}
+      {effectiveView === 'dashboard' && <DashboardView />}
+      {effectiveView === 'courses' && <CoursesView />}
+      {effectiveView === 'course-detail' && <CourseDetailView />}
+      {effectiveView === 'quizzes' && <QuizzesView />}
+      {effectiveView === 'quiz-taking' && <QuizTakingView />}
+      {effectiveView === 'library' && <LibraryView />}
+      {effectiveView === 'library-detail' && <LibraryDetailView />}
+      {effectiveView === 'certificates' && <CertificatesView />}
+      {effectiveView === 'certificate-verify' && <CertificateVerifyView />}
+      {effectiveView === 'reports' && <ReportsView />}
+      {effectiveView === 'users' && <UsersView />}
+      {effectiveView === 'settings' && <SettingsView />}
+      {effectiveView === 'notifications' && <NotificationsView />}
     </AppShell>
   )
 }

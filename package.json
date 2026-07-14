@@ -25,6 +25,8 @@
     "db:seed:preview": "tsx prisma/seed.ts",
     "db:seed:admin": "tsx prisma/seed-admin.ts",
     "db:init:production": "tsx prisma/init-production.ts",
+    "db:inspect:production-content": "tsx prisma/inspect-production-content.ts",
+    "db:init:production-content": "tsx prisma/init-production-content.ts",
     "postinstall": "node scripts/prisma-generate.mjs"
   },
   "dependencies": {

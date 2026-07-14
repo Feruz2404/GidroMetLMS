@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
       department: user.department,
       position: user.position,
       isActive: user.isActive,
+      mustChangePassword: user.mustChangePassword,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
     }

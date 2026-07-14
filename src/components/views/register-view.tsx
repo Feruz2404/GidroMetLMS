@@ -49,7 +49,7 @@ export function RegisterView() {
       setError(t('auth.passwordMismatch'))
       return
     }
-    if (form.password.length < 6) {
+    if (form.password.length < 12) {
       setError(t('auth.passwordTooShort'))
       return
     }

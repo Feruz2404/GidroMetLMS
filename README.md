@@ -70,6 +70,8 @@ $env:INITIAL_ADMIN_PASSWORD="a-unique-strong-password"
 npm run db:seed:admin
 ```
 
+After a verified backup and reviewed migrations, the production content initializer can populate the organization catalogue, 18 course categories, 18 complete courses, assessments, 25 library records, announcements, notifications, a certificate template, and safe learner enrollments. It preserves existing records, is resumable and idempotent, and refuses non-PostgreSQL or unapproved environments. Follow the operator sequence in [docs/deployment.md](docs/deployment.md); never add this command to a recurring build.
+
 ## Quality checks
 
 ```bash
