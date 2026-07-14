@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { hasPermission, PERMISSIONS } from '@/server/auth/permissions'
 
 // GET /api/library — paginated list with filters
 // Query: search (title/author/description/tags), type, category, year, language,
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (!['tutor', 'admin'].includes(user.role)) return err(403, 'Ruxsat yo\'q')
+    if (!hasPermission(user.role, PERMISSIONS.LIBRARY_MANAGE)) return err(403, 'Ruxsat yo\'q')
 
     const body = await req.json()
     const {
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
       return err(400, 'Sarlavha kamida 3 ta belgidan iborat bo\'lishi kerak')
     }
 
-    const validTypes = ['book', 'article', 'video', 'audio', 'document', 'normative']
+    const validTypes = ['book', 'article', 'video', 'audio', 'document', 'manual', 'presentation', 'normative']
     const finalType = validTypes.includes(type as string) ? (type as string) : 'book'
 
     const resource = await db.libraryResource.create({

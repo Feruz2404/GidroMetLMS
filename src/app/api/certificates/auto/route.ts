@@ -9,6 +9,7 @@ import {
   generateCertNumber,
   generateVerifyHash,
 } from '@/lib/auth'
+import { isAdminRole } from '@/server/auth/permissions'
 
 // POST /api/certificates/auto — auto-generate certificates for eligible quiz attempts
 // Eligibility: QuizAttempt where passed=true, status='graded', quiz has courseId,
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (!['tutor', 'admin'].includes(user.role)) {
+    if (!isAdminRole(user.role)) {
       return err(403, 'Ruxsat yo\'q')
     }
 
@@ -29,7 +30,8 @@ export async function POST(req: NextRequest) {
         status: 'graded',
         quiz: { courseId: { not: null } },
         // No certificate exists for this attemptId
-        // (we'll do a follow-up filter to be safe since SQLite doesn't fully support this relation check)
+        // Keep a follow-up duplicate filter so concurrent eligible attempts cannot
+        // create multiple certificates for the same learner and course.
       },
       include: {
         quiz: {

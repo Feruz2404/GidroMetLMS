@@ -1,10 +1,13 @@
 import { db, getDatabaseConfigStatus, getPrismaErrorDetails } from '@/lib/db'
 import { isSessionSecretConfigured } from '@/lib/auth'
 import { logServerError } from '@/lib/server-log'
+import { getDeploymentEnvironment, resolveApplicationUrl } from '@/lib/environment'
 
 export async function GET() {
   const databaseConfig = getDatabaseConfigStatus()
   const sessionSecretConfigured = isSessionSecretConfigured()
+  const deploymentEnvironment = getDeploymentEnvironment()
+  const applicationUrlConfigured = Boolean(resolveApplicationUrl())
   let databaseReachable = false
   let databaseErrorCode: string | null = null
 
@@ -29,9 +32,10 @@ export async function GET() {
     databaseConfig.databaseUrlSupported &&
     (!databaseConfig.productionRequiresPostgres || databaseConfig.databaseUrlProductionReady) &&
     sessionSecretConfigured &&
+    applicationUrlConfigured &&
     databaseReachable
 
-  return Response.json(
+  const response = Response.json(
     {
       status: healthy ? 'ok' : 'degraded',
       checks: {
@@ -45,13 +49,23 @@ export async function GET() {
           databaseUrlProductionReady: databaseConfig.databaseUrlProductionReady,
           productionRequiresPostgres: databaseConfig.productionRequiresPostgres,
           directUrlConfigured: databaseConfig.directUrlConfigured,
+          directUrlSource: databaseConfig.directUrlSource,
+          databaseProvider: databaseConfig.databaseProvider,
+          runtimeConnectionType: databaseConfig.runtimeConnectionType,
+          migrationConnectionType: databaseConfig.migrationConnectionType,
+          databaseSslEnabled: databaseConfig.databaseSslEnabled,
+          sameDatabaseEnvironment: databaseConfig.sameDatabaseEnvironment,
           sessionSecretConfigured,
+          applicationUrlConfigured,
+          deploymentEnvironment,
         },
       },
       timestamp: new Date().toISOString(),
     },
     { status: healthy ? 200 : 503 }
   )
+  response.headers.set('Cache-Control', 'no-store, max-age=0')
+  return response
 }
 
 export const dynamic = 'force-dynamic'

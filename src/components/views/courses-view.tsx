@@ -58,6 +58,7 @@ const PAGE_SIZE = 12
 export function CoursesView() {
   const user = useAuth((s) => s.user)!
   const navigate = useNav((s) => s.navigate)
+  const navQuery = useNav((s) => s.params.q)
   const { t } = useTranslation()
   const { toast } = useToast()
 
@@ -74,6 +75,10 @@ export function CoursesView() {
   const [sort, setSort] = useState<string>('newest')
 
   // Debounce search input
+  useEffect(() => {
+    if (navQuery) Promise.resolve().then(() => setSearch(navQuery))
+  }, [navQuery])
+
   useEffect(() => {
     const t = setTimeout(() => {
       setDebouncedSearch(search)
@@ -190,7 +195,7 @@ export function CoursesView() {
             {t('courses.heroSubtitle')}
           </p>
         </div>
-        {(user.role === 'tutor' || user.role === 'admin') && (
+        {['super_admin', 'administrator', 'instructor', 'admin', 'tutor'].includes(user.role) && (
           <Button onClick={handleCreateCourse}>
             <Plus className="w-4 h-4" /> {t('courses.newCourse')}
           </Button>
@@ -271,7 +276,7 @@ export function CoursesView() {
           <span>
             {loading ? t('common.loading') : `${meta.total} ${t('courses.foundCount')}`}
           </span>
-          {user.role === 'student' && (
+          {['student', 'learner'].includes(user.role) && (
             <span className="flex items-center gap-1">
               <Sparkles className="w-3.5 h-3.5 text-primary" />
               {t('courses.startLearning')}
@@ -326,7 +331,7 @@ export function CoursesView() {
             <CourseCard
               key={course.id}
               course={course}
-              isStudent={user.role === 'student'}
+              isStudent={['student', 'learner'].includes(user.role)}
               onOpen={() => navigate('course-detail', { id: course.id })}
               onEnroll={(e) => handleEnroll(e, course.id)}
             />
@@ -401,6 +406,8 @@ function CourseCard({
       {/* Thumbnail */}
       <div className="relative aspect-[16/9] overflow-hidden bg-muted">
         {course.thumbnailUrl ? (
+          // Course images are administrator-provided remote URLs with no fixed host.
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={course.thumbnailUrl}
             alt={course.title}

@@ -10,6 +10,7 @@ import {
   readJson,
   verifyPassword,
 } from '@/lib/auth'
+import { passwordSchema } from '@/validators/auth'
 
 // GET /api/auth/me - current user profile
 export async function GET(req: NextRequest) {
@@ -30,6 +31,7 @@ export async function GET(req: NextRequest) {
       department: user.department,
       position: user.position,
       isActive: user.isActive,
+      mustChangePassword: user.mustChangePassword,
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
     })
@@ -47,17 +49,16 @@ export async function PATCH(req: NextRequest) {
       lastName?: string
       middleName?: string | null
       phone?: string | null
-      department?: string | null
-      position?: string | null
       avatarUrl?: string | null
       password?: string
       currentPassword?: string
     }>(req)
-    const { firstName, lastName, middleName, phone, department, position, avatarUrl, password, currentPassword } = body
+    const { firstName, lastName, middleName, phone, avatarUrl, password, currentPassword } = body
 
     if (password !== undefined) {
       if (!currentPassword) return err(400, 'Missing current password', undefined, 'MISSING_CURRENT_PASSWORD')
-      if (password.length < 6) return err(400, 'Password must be at least 6 characters', undefined, 'PASSWORD_TOO_SHORT')
+      const parsedPassword = passwordSchema.safeParse(password)
+      if (!parsedPassword.success) return err(400, parsedPassword.error.issues[0]?.message ?? 'Weak password', undefined, 'WEAK_PASSWORD')
       if (!verifyPassword(currentPassword, user.passwordHash)) {
         return err(401, 'Invalid credentials', undefined, 'INVALID_CREDENTIALS')
       }
@@ -70,10 +71,8 @@ export async function PATCH(req: NextRequest) {
         ...(lastName !== undefined && { lastName }),
         ...(middleName !== undefined && { middleName }),
         ...(phone !== undefined && { phone }),
-        ...(department !== undefined && { department }),
-        ...(position !== undefined && { position }),
         ...(avatarUrl !== undefined && { avatarUrl }),
-        ...(password !== undefined && { passwordHash: hashPassword(password) }),
+        ...(password !== undefined && { passwordHash: hashPassword(password), mustChangePassword: false }),
       },
     })
 
@@ -89,6 +88,7 @@ export async function PATCH(req: NextRequest) {
       avatarUrl: updated.avatarUrl,
       department: updated.department,
       position: updated.position,
+      mustChangePassword: updated.mustChangePassword,
     })
   } catch (e) {
     if (e instanceof Error && e.message === 'UNAUTHORIZED') {

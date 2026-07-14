@@ -74,7 +74,7 @@ export function QuizzesView() {
   const [courseId, setCourseId] = useState<string>('all')
   const [status, setStatus] = useState<string>('all')
 
-  const isStaff = user.role === 'tutor' || user.role === 'admin'
+  const isStaff = ['super_admin', 'administrator', 'instructor', 'admin', 'tutor'].includes(user.role)
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -148,7 +148,7 @@ export function QuizzesView() {
       })
       return
     }
-    if (user.role === 'student' && (quiz.myAttempts ?? 0) >= quiz.maxAttempts) {
+    if (['student', 'learner'].includes(user.role) && (quiz.myAttempts ?? 0) >= quiz.maxAttempts) {
       toast({
         title: t('quizzes.attemptsExceeded'),
         description: t('quizzes.maxAttemptsUsed').replace('{n}', String(quiz.maxAttempts)),
@@ -256,7 +256,7 @@ export function QuizzesView() {
           <span>
             {loading ? t('common.loading') : `${meta.total} ${t('quizzes.foundCount')}`}
           </span>
-          {user.role === 'student' && (
+          {['student', 'learner'].includes(user.role) && (
             <span className="flex items-center gap-1">
               <Trophy className="w-3.5 h-3.5 text-primary" />
               {t('quizzes.tryQuizHint')}
@@ -307,7 +307,7 @@ export function QuizzesView() {
             <QuizCard
               key={quiz.id}
               quiz={quiz}
-              isStudent={user.role === 'student'}
+              isStudent={['student', 'learner'].includes(user.role)}
               onStart={() => handleStartQuiz(quiz)}
               onViewResults={() => handleViewResults(quiz)}
             />

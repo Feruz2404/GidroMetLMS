@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { hasPermission, PERMISSIONS } from '@/server/auth/permissions'
 
 // POST /api/library/[id]/download — record a download, increment downloadCount,
 // log activity, and return the fileUrl (in a real app this would be a signed URL).
@@ -28,7 +29,7 @@ export async function POST(
     if (!resource) return err(404, 'Resurs topilmadi')
 
     // Archived resources are not downloadable for students
-    if (resource.status === 'archived' && !['tutor', 'admin'].includes(user.role)) {
+    if (resource.status === 'archived' && !hasPermission(user.role, PERMISSIONS.LIBRARY_MANAGE)) {
       return err(404, 'Resurs topilmadi')
     }
 

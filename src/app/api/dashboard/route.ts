@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err } from '@/lib/auth'
+import { isInstructorRole, isLearnerRole, isManagerRole } from '@/server/auth/permissions'
 
 // GET /api/dashboard — role-based stats
 export async function GET(req: NextRequest) {
@@ -8,7 +9,7 @@ export async function GET(req: NextRequest) {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
 
-    if (user.role === 'student') {
+    if (isLearnerRole(user.role)) {
       const enrollments = await db.enrollment.findMany({
         where: { userId: user.id },
         include: {
@@ -72,7 +73,7 @@ export async function GET(req: NextRequest) {
       })
 
       return ok({
-        role: 'student',
+        role: user.role,
         stats: {
           enrolled: enrollments.length,
           completed,
@@ -88,7 +89,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    if (user.role === 'tutor') {
+    if (isInstructorRole(user.role)) {
       const courses = await db.course.findMany({
         where: { tutorId: user.id },
         include: {
@@ -114,7 +115,7 @@ export async function GET(req: NextRequest) {
         : 0
 
       return ok({
-        role: 'tutor',
+        role: user.role,
         stats: {
           courses: courses.length,
           students: new Set(enrollments.map((e) => e.userId)).size,
@@ -128,10 +129,72 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // Admin
-    const totalStudents = await db.user.count({ where: { role: 'student' } })
-    const totalTutors = await db.user.count({ where: { role: 'tutor' } })
-    const totalAdmins = await db.user.count({ where: { role: 'admin' } })
+    if (isManagerRole(user.role)) {
+      if (!user.department) return err(403, 'Department scope is not configured', undefined, 'DEPARTMENT_SCOPE_MISSING')
+      const employees = await db.user.findMany({
+        where: { department: user.department, role: { in: ['learner', 'student'] }, isActive: true },
+        select: { id: true },
+      })
+      const employeeIds = employees.map((employee) => employee.id)
+      const enrollments = await db.enrollment.findMany({
+        where: { userId: { in: employeeIds } },
+        select: { userId: true, courseId: true, status: true },
+      })
+      const attempts = await db.quizAttempt.findMany({
+        where: { userId: { in: employeeIds }, status: 'graded' },
+        select: { passed: true, percentage: true },
+      })
+      const courseIds = [...new Set(enrollments.map((enrollment) => enrollment.courseId))]
+      const courses = await db.course.findMany({
+        where: { id: { in: courseIds } },
+        select: { id: true, title: true, _count: { select: { lessons: true } } },
+      })
+      const enrollmentCounts = new Map<string, number>()
+      enrollments.forEach((enrollment) => enrollmentCounts.set(enrollment.courseId, (enrollmentCounts.get(enrollment.courseId) ?? 0) + 1))
+      const totalCertificates = await db.certificate.count({ where: { userId: { in: employeeIds }, status: 'active' } })
+      const recentCertificates = await db.certificate.findMany({
+        where: { userId: { in: employeeIds } },
+        take: 5,
+        orderBy: { issuedAt: 'desc' },
+        include: {
+          user: { select: { firstName: true, lastName: true } },
+          course: { select: { title: true } },
+        },
+      })
+      const passed = attempts.filter((attempt) => attempt.passed).length
+      const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      const activeUsers = await db.activityLog.findMany({
+        where: { userId: { in: employeeIds }, action: 'login', createdAt: { gte: monthAgo } },
+        select: { userId: true },
+        distinct: ['userId'],
+      })
+
+      return ok({
+        role: user.role,
+        stats: {
+          totalStudents: employees.length,
+          totalTutors: 0,
+          totalAdmins: 0,
+          totalCourses: courseIds.length,
+          totalCertificates,
+          totalResources: 0,
+          totalEnrollments: enrollments.length,
+          activeUsers: activeUsers.length,
+          passRate: attempts.length ? Math.round((passed / attempts.length) * 100) : 0,
+          avgScore: attempts.length ? Math.round(attempts.reduce((sum, attempt) => sum + attempt.percentage, 0) / attempts.length) : 0,
+        },
+        topCourses: courses
+          .map((course) => ({ ...course, _count: { lessons: course._count.lessons, enrollments: enrollmentCounts.get(course.id) ?? 0 } }))
+          .sort((a, b) => b._count.enrollments - a._count.enrollments)
+          .slice(0, 5),
+        recentCertificates,
+      })
+    }
+
+    // Organization-wide administrator view.
+    const totalStudents = await db.user.count({ where: { role: { in: ['student', 'learner'] } } })
+    const totalTutors = await db.user.count({ where: { role: { in: ['tutor', 'instructor'] } } })
+    const totalAdmins = await db.user.count({ where: { role: { in: ['admin', 'administrator', 'super_admin'] } } })
     const totalCourses = await db.course.count({ where: { status: 'published' } })
     const totalCertificates = await db.certificate.count({ where: { status: 'active' } })
     const totalResources = await db.libraryResource.count({ where: { status: 'active' } })
@@ -192,7 +255,7 @@ export async function GET(req: NextRequest) {
     })
 
     return ok({
-      role: 'admin',
+      role: user.role,
       stats: {
         totalStudents,
         totalTutors,

@@ -37,9 +37,7 @@ export function SettingsView() {
   const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' })
 
   const roleLabel = (role: string) => {
-    if (role === 'admin') return t('role.admin')
-    if (role === 'tutor') return t('role.tutor')
-    return t('role.student')
+    return t(`role.${role}`)
   }
 
   const saveProfile = async (e: React.FormEvent) => {
@@ -62,13 +60,14 @@ export function SettingsView() {
       toast({ title: t('settings.error'), description: t('settings.passwordMismatch'), variant: 'destructive' })
       return
     }
-    if (passwords.next.length < 6) {
+    if (passwords.next.length < 12) {
       toast({ title: t('settings.error'), description: t('settings.passwordTooShort'), variant: 'destructive' })
       return
     }
     setPasswordLoading(true)
     try {
       await api.patch('/auth/me', { password: passwords.next, currentPassword: passwords.current })
+      updateUser({ mustChangePassword: false })
       setPasswords({ current: '', next: '', confirm: '' })
       toast({ title: t('settings.passwordChanged'), description: t('settings.passwordSet') })
     } catch {
@@ -92,12 +91,20 @@ export function SettingsView() {
         <p className="text-muted-foreground">{t('settings.subtitle')}</p>
       </div>
 
-      <Tabs defaultValue="profile">
+      {user.mustChangePassword && (
+        <Card className="max-w-2xl border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30">
+          <CardContent className="p-4 text-sm text-amber-900 dark:text-amber-100">
+            Hisob xavfsizligi uchun vaqtinchalik parolni davom etishdan oldin o‘zgartiring.
+          </CardContent>
+        </Card>
+      )}
+
+      <Tabs defaultValue={user.mustChangePassword ? 'password' : 'profile'}>
         <TabsList className="flex flex-wrap h-auto">
           <TabsTrigger value="profile"><User className="w-4 h-4 mr-2" /> {t('settings.tab.profile')}</TabsTrigger>
           <TabsTrigger value="password"><Lock className="w-4 h-4 mr-2" /> {t('settings.tab.password')}</TabsTrigger>
           <TabsTrigger value="notifications"><Bell className="w-4 h-4 mr-2" /> {t('settings.tab.notifications')}</TabsTrigger>
-          {user.role === 'admin' && <TabsTrigger value="system"><Database className="w-4 h-4 mr-2" /> {t('settings.tab.system')}</TabsTrigger>}
+          {['super_admin', 'administrator', 'admin'].includes(user.role) && <TabsTrigger value="system"><Database className="w-4 h-4 mr-2" /> {t('settings.tab.system')}</TabsTrigger>}
         </TabsList>
 
         {/* Profile */}
@@ -177,7 +184,7 @@ export function SettingsView() {
                 </div>
                 <div className="space-y-2">
                   <Label>{t('settings.newPassword')}</Label>
-                  <Input type="password" value={passwords.next} onChange={(e) => setPasswords({ ...passwords, next: e.target.value })} required minLength={6} />
+                  <Input type="password" value={passwords.next} onChange={(e) => setPasswords({ ...passwords, next: e.target.value })} required minLength={12} />
                 </div>
                 <div className="space-y-2">
                   <Label>{t('settings.confirmPassword')}</Label>
@@ -223,7 +230,7 @@ export function SettingsView() {
         </TabsContent>
 
         {/* System (admin) */}
-        {user.role === 'admin' && (
+        {['super_admin', 'administrator', 'admin'].includes(user.role) && (
           <TabsContent value="system">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
               <Card>
@@ -233,7 +240,7 @@ export function SettingsView() {
                 <CardContent className="space-y-3 text-sm">
                   <div className="flex justify-between"><span className="text-muted-foreground">{t('settings.version')}:</span><span className="font-mono">1.0.0</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">{t('settings.framework')}:</span><span>Next.js 16</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">{t('settings.database')}:</span><span>SQLite + Prisma</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">{t('settings.database')}:</span><span>PostgreSQL + Prisma</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">{t('settings.environment')}:</span><Badge variant="secondary">{t('settings.development')}</Badge></div>
                 </CardContent>
               </Card>

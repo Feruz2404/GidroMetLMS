@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { isInstructorRole, isLearnerRole } from '@/server/auth/permissions'
 
 // POST /api/quizzes/[id]/attempt — start a new attempt
 // - Checks quiz is published (for students) and maxAttempts not exceeded
@@ -23,7 +24,7 @@ export async function POST(
           orderBy: { order: 'asc' },
           include: { options: { orderBy: { order: 'asc' } } },
         },
-        ...(user.role === 'student'
+        ...(isLearnerRole(user.role)
           ? {
               attempts: {
                 where: { userId: user.id },
@@ -37,16 +38,16 @@ export async function POST(
     if (!quiz) return err(404, 'Test topilmadi')
 
     // Visibility
-    if (user.role === 'student' && quiz.status !== 'published') {
+    if (isLearnerRole(user.role) && quiz.status !== 'published') {
       return err(404, 'Test topilmadi')
     }
-    if (user.role === 'tutor' && quiz.status !== 'published' && quiz.createdBy !== user.id) {
+    if (isInstructorRole(user.role) && quiz.status !== 'published' && quiz.createdBy !== user.id) {
       return err(403, 'Ruxsat yo\'q')
     }
 
     // Only students take quizzes (tutors/admins can preview but the UI shouldn't really do that)
     // For demo, allow students only.
-    if (user.role !== 'student') {
+    if (!isLearnerRole(user.role)) {
       return err(403, 'Faqat talabalar test topshira oladi')
     }
 

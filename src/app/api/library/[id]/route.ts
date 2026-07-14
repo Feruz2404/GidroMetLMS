@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { hasPermission, isInstructorRole, PERMISSIONS } from '@/server/auth/permissions'
 
 // GET /api/library/[id] — full resource details; increments viewCount
 export async function GET(
@@ -29,7 +30,7 @@ export async function GET(
     if (!resource) return err(404, 'Resurs topilmadi')
 
     // Visibility: archived resources only visible to staff
-    if (resource.status === 'archived' && !['tutor', 'admin'].includes(user.role)) {
+    if (resource.status === 'archived' && !hasPermission(user.role, PERMISSIONS.LIBRARY_MANAGE)) {
       return err(404, 'Resurs topilmadi')
     }
 
@@ -65,14 +66,14 @@ export async function PATCH(
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (!['tutor', 'admin'].includes(user.role)) return err(403, 'Ruxsat yo\'q')
+    if (!hasPermission(user.role, PERMISSIONS.LIBRARY_MANAGE)) return err(403, 'Ruxsat yo\'q')
 
     const { id } = await params
     const existing = await db.libraryResource.findUnique({ where: { id } })
     if (!existing) return err(404, 'Resurs topilmadi')
 
     // Tutors can only edit their own uploads; admins can edit any
-    if (user.role === 'tutor' && existing.uploadedBy !== user.id) {
+    if (isInstructorRole(user.role) && existing.uploadedBy !== user.id) {
       return err(403, 'Faqat o\'z yuklagan resurslaringizni tahrirlay olasiz')
     }
 
@@ -137,13 +138,13 @@ export async function DELETE(
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (!['tutor', 'admin'].includes(user.role)) return err(403, 'Ruxsat yo\'q')
+    if (!hasPermission(user.role, PERMISSIONS.LIBRARY_MANAGE)) return err(403, 'Ruxsat yo\'q')
 
     const { id } = await params
     const existing = await db.libraryResource.findUnique({ where: { id } })
     if (!existing) return err(404, 'Resurs topilmadi')
 
-    if (user.role === 'tutor' && existing.uploadedBy !== user.id) {
+    if (isInstructorRole(user.role) && existing.uploadedBy !== user.id) {
       return err(403, 'Faqat o\'z yuklagan resurslaringizni o\'chira olasiz')
     }
 

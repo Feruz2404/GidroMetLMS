@@ -22,6 +22,7 @@ import {
   Video,
   Headphones,
   File,
+  Presentation,
   Scale,
   Library as LibraryIcon,
   Plus,
@@ -50,9 +51,11 @@ const TYPE_COLORS: Record<string, string> = {
   audio: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800',
   document: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800',
   normative: 'bg-slate-200 text-slate-700 dark:bg-slate-800/50 dark:text-slate-300 border-slate-300 dark:border-slate-700',
+  manual: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800',
+  presentation: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800',
 }
 
-const RESOURCE_TYPES = ['book', 'article', 'video', 'audio', 'document', 'normative']
+const RESOURCE_TYPES = ['book', 'article', 'video', 'audio', 'document', 'manual', 'presentation', 'normative']
 
 const PAGE_SIZE = 12
 
@@ -65,6 +68,8 @@ function ResourceTypeIcon({ type, className }: { type: string; className?: strin
     case 'audio': return <Headphones className={className} />
     case 'normative': return <Scale className={className} />
     case 'document': return <File className={className} />
+    case 'manual': return <BookOpen className={className} />
+    case 'presentation': return <Presentation className={className} />
     default: return <FileText className={className} />
   }
 }
@@ -244,7 +249,7 @@ export function LibraryView() {
             <Star className={cn('w-4 h-4', bookmarksOnly && 'fill-current')} />
             {t('common.myBookmarks')}
           </Button>
-          {(user.role === 'tutor' || user.role === 'admin') && (
+          {['super_admin', 'administrator', 'instructor', 'admin', 'tutor'].includes(user.role) && (
             <Button onClick={handleCreate}>
               <Plus className="w-4 h-4" /> {t('library.newResource')}
             </Button>
@@ -480,6 +485,8 @@ function ResourceCard({
       {/* Cover / icon header */}
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
         {resource.coverUrl ? (
+          // Library covers are administrator-provided remote URLs with no fixed host.
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={resource.coverUrl}
             alt={resource.title}

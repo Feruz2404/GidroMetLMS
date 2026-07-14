@@ -1,17 +1,10 @@
 import { PrismaClient } from '@prisma/client'
 import { logServerEvent } from '@/lib/server-log'
+import { describeDatabaseConfiguration, isPostgresUrl, resolveDatabaseConfiguration } from '@/lib/environment'
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
-
-const DATABASE_URL_CANDIDATES = [
-  'DATABASE_URL',
-  'POSTGRES_PRISMA_URL',
-  'POSTGRES_URL',
-  'POSTGRES_URL_NON_POOLING',
-  'DIRECT_URL',
-] as const
 
 export class ServerConfigError extends Error {
   statusCode = 503
@@ -26,14 +19,8 @@ export class ServerConfigError extends Error {
 }
 
 export function resolveDatabaseUrlWithSource(env = process.env): { url?: string; source?: string } {
-  for (const key of DATABASE_URL_CANDIDATES) {
-    const candidate = env[key]
-    if (typeof candidate === 'string' && candidate.trim()) {
-      return { url: candidate.trim(), source: key }
-    }
-  }
-
-  return {}
+  const database = resolveDatabaseConfiguration(env)
+  return { url: database.databaseUrl, source: database.databaseUrlSource }
 }
 
 export function resolveDatabaseUrl(env = process.env): string | undefined {
@@ -41,41 +28,40 @@ export function resolveDatabaseUrl(env = process.env): string | undefined {
 }
 
 export function isPostgresDatabaseUrl(url?: string): boolean {
-  return Boolean(url && /^(postgres(?:ql)?:\/\/)/i.test(url.trim()))
-}
-
-export function isSqliteDatabaseUrl(url?: string): boolean {
-  return Boolean(url && /^file:/i.test(url.trim()))
+  return isPostgresUrl(url)
 }
 
 export function isSupportedDatabaseUrl(url?: string): boolean {
-  return isPostgresDatabaseUrl(url) || isSqliteDatabaseUrl(url)
+  return isPostgresDatabaseUrl(url)
 }
 
 export function isDatabaseUrlConfigured(url?: string): boolean {
   return isPostgresDatabaseUrl(url)
 }
 
-function requiresProductionDatabase(env = process.env): boolean {
-  return env.NODE_ENV === 'production' || env.VERCEL === '1'
-}
-
 export function getDatabaseConfigStatus(env = process.env) {
-  const { url, source } = resolveDatabaseUrlWithSource(env)
-  const productionRequiresPostgres = requiresProductionDatabase(env)
+  const database = resolveDatabaseConfiguration(env)
+  const diagnostic = describeDatabaseConfiguration(env)
+  const url = database.databaseUrl
 
   return {
     databaseUrlConfigured: Boolean(url),
-    databaseUrlSource: source ?? null,
+    databaseUrlSource: database.databaseUrlSource ?? null,
     databaseUrlSupported: isSupportedDatabaseUrl(url),
     databaseUrlProductionReady: isDatabaseUrlConfigured(url),
-    productionRequiresPostgres,
-    directUrlConfigured: Boolean(env.DIRECT_URL || env.POSTGRES_URL_NON_POOLING),
+    productionRequiresPostgres: true,
+    directUrlConfigured: isPostgresDatabaseUrl(database.directUrl),
+    directUrlSource: database.directUrlSource ?? null,
+    databaseProvider: diagnostic.runtime.provider,
+    runtimeConnectionType: diagnostic.runtime.connectionType,
+    migrationConnectionType: diagnostic.migration.connectionType,
+    databaseSslEnabled: diagnostic.runtime.sslEnabled && diagnostic.migration.sslEnabled,
+    sameDatabaseEnvironment: diagnostic.sameEnvironment,
   }
 }
 
 function getRuntimeDatabaseUrl(env = process.env): string {
-  const { url, source } = resolveDatabaseUrlWithSource(env)
+  const { url } = resolveDatabaseUrlWithSource(env)
 
   if (!url) {
     throw new ServerConfigError(
@@ -84,17 +70,10 @@ function getRuntimeDatabaseUrl(env = process.env): string {
     )
   }
 
-  if (!isSupportedDatabaseUrl(url)) {
+  if (!isPostgresDatabaseUrl(url)) {
     throw new ServerConfigError(
-      'Unsupported DATABASE_URL protocol. Use postgresql:// in production or file: for local SQLite development.',
+      'Unsupported DATABASE_URL protocol. GidroEdu LMS requires PostgreSQL in every environment.',
       'DATABASE_URL_INVALID'
-    )
-  }
-
-  if (requiresProductionDatabase(env) && !isPostgresDatabaseUrl(url)) {
-    throw new ServerConfigError(
-      `Production database URL must be PostgreSQL. ${source ?? 'DATABASE_URL'} is not production-ready.`,
-      'DATABASE_URL_NOT_PRODUCTION_READY'
     )
   }
 
@@ -121,7 +100,7 @@ function createPrismaClient(): PrismaClient {
   process.env.DATABASE_URL = databaseUrl
   logServerEvent('info', 'db.prisma.init', {
     databaseUrlSource: resolveDatabaseUrlWithSource().source,
-    provider: isPostgresDatabaseUrl(databaseUrl) ? 'postgresql' : 'sqlite',
+    provider: 'postgresql',
   })
 
   return new PrismaClient({

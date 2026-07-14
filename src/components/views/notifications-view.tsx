@@ -53,7 +53,7 @@ export function NotificationsView() {
   }, [filter])
 
   useEffect(() => {
-    fetchNotifs()
+    Promise.resolve().then(fetchNotifs)
   }, [fetchNotifs])
 
   const markAllRead = async () => {

@@ -1,18 +1,20 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import {
-  requireRole,
+  requirePermission,
   ok,
   err,
   hashPassword,
   logActivity,
   getClientIp,
 } from '@/lib/auth'
+import { PERMISSIONS } from '@/server/auth/permissions'
+import { adminRoleSchema, passwordSchema } from '@/validators/auth'
 
 // GET /api/users — admin only, paginated list
 export async function GET(req: NextRequest) {
   try {
-    await requireRole(req, 'admin')
+    await requirePermission(req, PERMISSIONS.USERS_MANAGE)
 
     const { searchParams } = new URL(req.url)
     const search = searchParams.get('search') ?? ''
@@ -76,22 +78,20 @@ export async function GET(req: NextRequest) {
 // POST /api/users — admin creates new user
 export async function POST(req: NextRequest) {
   try {
-    const admin = await requireRole(req, 'admin')
+    const admin = await requirePermission(req, PERMISSIONS.USERS_MANAGE)
     const body = await req.json()
     const { email, username, password, role, firstName, lastName, middleName, phone, department, position } = body as Record<string, unknown>
 
     if (!email || !username || !password || !role || !firstName || !lastName) {
       return err(400, 'Majburiy maydonlar: email, username, password, role, firstName, lastName')
     }
-    if (!['admin', 'tutor', 'student'].includes(String(role))) {
-      return err(400, 'Rol noto\'g\'ri: admin, tutor yoki student bo\'lishi kerak')
-    }
-    if (String(password).length < 6) {
-      return err(400, 'Parol kamida 6 ta belgidan iborat bo\'lishi kerak')
-    }
+    const parsedRole = adminRoleSchema.safeParse(String(role))
+    if (!parsedRole.success) return err(400, parsedRole.error.issues[0]?.message ?? 'Invalid role')
+    const parsedPassword = passwordSchema.safeParse(String(password))
+    if (!parsedPassword.success) return err(400, parsedPassword.error.issues[0]?.message ?? 'Weak password')
 
-    const emailStr = String(email)
-    const usernameStr = String(username)
+    const emailStr = String(email).trim().toLowerCase()
+    const usernameStr = String(username).trim().toLowerCase()
     const existing = await db.user.findFirst({
       where: { OR: [{ email: emailStr }, { username: usernameStr }] },
     })
@@ -103,8 +103,8 @@ export async function POST(req: NextRequest) {
       data: {
         email: emailStr,
         username: usernameStr,
-        passwordHash: hashPassword(String(password)),
-        role: String(role),
+        passwordHash: hashPassword(parsedPassword.data),
+        role: parsedRole.data,
         firstName: String(firstName),
         lastName: String(lastName),
         middleName: middleName ? String(middleName) : null,

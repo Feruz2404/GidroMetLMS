@@ -6,8 +6,6 @@ import { create } from 'zustand'
 import {
   api,
   registerAuthErrorHandler,
-  getToken,
-  setToken,
   clearToken,
   ApiError,
   type User,
@@ -33,11 +31,9 @@ export const useAuth = create<AuthState>((set) => ({
     try {
       const res = await api.post<{ status: string; data: User }>('/auth', { email, password })
       // Store token in localStorage — sent as Bearer header on all subsequent requests
-      if (res.data.token) {
-        setToken(res.data.token)
-      }
+      clearToken()
       set({ user: res.data, initialized: true })
-      useNav.setState({ view: 'dashboard', params: {} })
+      useNav.setState({ view: res.data.mustChangePassword ? 'settings' : 'dashboard', params: {} })
       return res.data
     } finally {
       set({ loading: false })
@@ -56,13 +52,10 @@ export const useAuth = create<AuthState>((set) => ({
 
   fetchUser: async () => {
     // If no token in localStorage, skip the API call (not logged in)
-    if (!getToken()) {
-      set({ user: null, initialized: true })
-      return
-    }
     try {
       const res = await api.get<{ status: string; data: User }>('/auth/me')
       set({ user: res.data, initialized: true })
+      if (res.data.mustChangePassword) useNav.setState({ view: 'settings', params: {} })
     } catch {
       clearToken()
       set({ user: null, initialized: true })

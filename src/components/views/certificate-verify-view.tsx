@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { FormEvent, useEffect, useState, useMemo } from 'react'
 import { api, formatDate } from '@/lib/api'
-import { useNav } from '@/store/auth'
+import { useAuth, useNav } from '@/store/auth'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Card, CardContent } from '@/components/ui/card'
 import {
@@ -27,23 +28,19 @@ type VerifyResponse =
   | {
       found: true
       status: 'active'
-      id: string
       certNumber: string
       score: number
       maxScore: number
       percentage: number
       issuedAt: string
       validUntil: string | null
-      verifyHash: string
       user: {
-        id: string
         firstName: string
         lastName: string
         middleName?: string | null
       }
-      course: { id: string; title: string } | null
+      course: { title: string } | null
       template: {
-        id: string
         titleText: string
         bodyText?: string | null
         primaryColor: string
@@ -70,6 +67,7 @@ type CornerPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 export function CertificateVerifyView() {
   const params = useNav((s) => s.params)
   const navigate = useNav((s) => s.navigate)
+  const user = useAuth((s) => s.user)
   const { toast } = useToast()
   const { t } = useTranslation()
   const hash = params.hash
@@ -78,11 +76,14 @@ export function CertificateVerifyView() {
   const [data, setData] = useState<VerifyResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
+  const [verificationInput, setVerificationInput] = useState('')
+  const [inputError, setInputError] = useState('')
 
   useEffect(() => {
     if (!hash) {
       Promise.resolve().then(() => {
-        setNotFound(true)
+        setNotFound(false)
+        setData(null)
         setLoading(false)
       })
       return
@@ -133,6 +134,35 @@ export function CertificateVerifyView() {
     }
   }
 
+  const handleVerify = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    const value = verificationInput.trim()
+    let verificationHash = /^[a-f0-9]{40}$/i.test(value) ? value : ''
+
+    if (!verificationHash && typeof window !== 'undefined') {
+      try {
+        const url = new URL(value, window.location.origin)
+        const candidate = url.searchParams.get('hash') ?? url.searchParams.get('cert') ?? ''
+        if (/^[a-f0-9]{40}$/i.test(candidate)) verificationHash = candidate
+      } catch {
+        // The validation message below covers malformed links.
+      }
+    }
+
+    if (!verificationHash) {
+      setInputError(t('certificates.invalidCode'))
+      return
+    }
+
+    setInputError('')
+    navigate('certificate-verify', { hash: verificationHash.toLowerCase() })
+  }
+
+  const handleBack = () => {
+    if (user) navigate('certificates')
+    else navigate('certificate-verify')
+  }
+
   const handleCopyLink = () => {
     if (typeof window === 'undefined' || !hash) return
     const url = `${window.location.origin}?view=verify&hash=${hash}`
@@ -173,16 +203,67 @@ export function CertificateVerifyView() {
     )
   }
 
+  if (!hash) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center py-8">
+        <Card className="w-full max-w-xl shadow-sm">
+          <CardContent className="p-6 sm:p-8">
+            <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-50 text-cyan-700">
+              <QrCode className="h-7 w-7" aria-hidden="true" />
+            </div>
+            <div className="text-center">
+              <h1 className="text-2xl font-semibold tracking-tight">{t('certificates.verify')}</h1>
+              <p className="mt-2 text-sm text-muted-foreground">{t('certificates.verifyEntryDesc')}</p>
+            </div>
+
+            <form onSubmit={handleVerify} className="mt-7 space-y-4" noValidate>
+              <div className="space-y-2">
+                <label htmlFor="certificate-code" className="text-sm font-medium">
+                  {t('certificates.verificationCode')}
+                </label>
+                <Input
+                  id="certificate-code"
+                  value={verificationInput}
+                  onChange={(event) => {
+                    setVerificationInput(event.target.value)
+                    if (inputError) setInputError('')
+                  }}
+                  placeholder={t('certificates.verificationCodePlaceholder')}
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-invalid={Boolean(inputError)}
+                  aria-describedby={inputError ? 'certificate-code-error' : undefined}
+                  className="h-11 font-mono"
+                />
+                {inputError && (
+                  <p id="certificate-code-error" role="alert" className="text-sm text-destructive">
+                    {inputError}
+                  </p>
+                )}
+              </div>
+              <Button type="submit" className="h-11 w-full">
+                <CheckCircle2 className="h-4 w-4" /> {t('certificates.verifyAction')}
+              </Button>
+              <Button type="button" variant="ghost" className="w-full" onClick={() => navigate('dashboard')}>
+                <ArrowLeft className="h-4 w-4" /> {t('certificates.backToLogin')}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   if (notFound || !data) {
     return (
       <div className="space-y-4">
         <Button
           variant="ghost"
-          onClick={() => navigate('certificates')}
+          onClick={handleBack}
           size="sm"
           className="print:hidden"
         >
-          <ArrowLeft className="w-4 h-4" /> {t('certificates.backToCerts')}
+          <ArrowLeft className="w-4 h-4" /> {user ? t('certificates.backToCerts') : t('certificates.tryAnother')}
         </Button>
         <Card className="p-12">
           <div className="flex flex-col items-center text-center gap-4">
@@ -206,11 +287,11 @@ export function CertificateVerifyView() {
       <div className="space-y-4">
         <Button
           variant="ghost"
-          onClick={() => navigate('certificates')}
+          onClick={handleBack}
           size="sm"
           className="print:hidden"
         >
-          <ArrowLeft className="w-4 h-4" /> {t('certificates.backToCerts')}
+          <ArrowLeft className="w-4 h-4" /> {user ? t('certificates.backToCerts') : t('certificates.tryAnother')}
         </Button>
         <Card className="p-12">
           <div className="flex flex-col items-center text-center gap-4">
@@ -246,10 +327,10 @@ export function CertificateVerifyView() {
       <div className="flex items-center justify-between gap-2 print:hidden">
         <Button
           variant="ghost"
-          onClick={() => navigate('certificates')}
+          onClick={handleBack}
           size="sm"
         >
-          <ArrowLeft className="w-4 h-4" /> {t('certificates.backToCerts')}
+          <ArrowLeft className="w-4 h-4" /> {user ? t('certificates.backToCerts') : t('certificates.tryAnother')}
         </Button>
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleCopyLink}>
@@ -262,7 +343,7 @@ export function CertificateVerifyView() {
       </div>
 
       {/* The certificate itself */}
-      <CertificateDocument data={data} />
+      <CertificateDocument data={data} hash={hash} />
 
       {/* Verification status banner */}
       <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 print:hidden">
@@ -286,7 +367,13 @@ export function CertificateVerifyView() {
 
 // ============== THE FORMAL CERTIFICATE DOCUMENT ==============
 
-function CertificateDocument({ data }: { data: Extract<VerifyResponse, { status: 'active' }> }) {
+function CertificateDocument({
+  data,
+  hash,
+}: {
+  data: Extract<VerifyResponse, { status: 'active' }>
+  hash: string
+}) {
   const { t } = useTranslation()
   const primary = data.template?.primaryColor ?? '#0f766e'
   const accent = data.template?.accentColor ?? '#ca8a04'
@@ -304,8 +391,8 @@ function CertificateDocument({ data }: { data: Extract<VerifyResponse, { status:
   // QR code via qrserver.com API (no dependency, simple image)
   const verifyUrl =
     typeof window !== 'undefined'
-      ? `${window.location.origin}?view=verify&hash=${data.verifyHash}`
-      : `https://gidroedu.uz?view=verify&hash=${data.verifyHash}`
+      ? `${window.location.origin}?view=verify&hash=${hash}`
+      : `https://gidroedu.uz?view=verify&hash=${hash}`
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(
     verifyUrl
   )}&color=0f766e&bgcolor=ffffff&margin=0`
@@ -450,6 +537,8 @@ function CertificateDocument({ data }: { data: Extract<VerifyResponse, { status:
                 className="bg-white p-1 rounded shadow-sm border"
                 style={{ borderColor: `${primary}30` }}
               >
+                {/* QR data URLs should render directly without the image optimizer. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={qrSrc}
                   alt={t('certificates.qrAlt')}

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { hasPermission, isLearnerRole, PERMISSIONS } from '@/server/auth/permissions'
 
 // GET /api/quizzes — paginated list with filters
 // Query: search, courseId, status, page (1), limit (12)
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
     // Tutors/Admins: their own (any status) + published quizzes from others
     const where: Record<string, unknown> = {}
 
-    if (user.role === 'student') {
+    if (isLearnerRole(user.role)) {
       where.status = 'published'
     } else if (status) {
       where.status = status
@@ -57,7 +58,7 @@ export async function GET(req: NextRequest) {
         include: {
           course: { select: { id: true, title: true } },
           _count: { select: { questions: true, attempts: true } },
-          ...(user.role === 'student'
+          ...(isLearnerRole(user.role)
             ? {
                 attempts: {
                   where: { userId: user.id },
@@ -74,7 +75,7 @@ export async function GET(req: NextRequest) {
       const { attempts, ...rest } = q as typeof q & {
         attempts?: Array<{ id: string; status: string; score: number; maxScore: number; percentage: number; passed: boolean; submittedAt: Date }>
       }
-      if (user.role !== 'student' || !attempts) {
+      if (!isLearnerRole(user.role) || !attempts) {
         return { ...rest, myAttempts: 0, bestScore: null }
       }
       const graded = attempts.filter((a) => a.status === 'graded')
@@ -105,7 +106,7 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (!['tutor', 'admin'].includes(user.role)) return err(403, 'Ruxsat yo\'q')
+    if (!hasPermission(user.role, PERMISSIONS.ASSESSMENTS_MANAGE)) return err(403, 'Ruxsat yo\'q')
 
     const body = await req.json()
     const {

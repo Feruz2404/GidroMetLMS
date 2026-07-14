@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import {
   api,
   formatFileSize,
@@ -8,6 +8,7 @@ import {
   type LibraryResource,
 } from '@/lib/api'
 import { useNav } from '@/store/auth'
+import { safeResourceUrl } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +20,7 @@ import {
   Video,
   Headphones,
   File,
+  Presentation,
   Scale,
   Star,
   Eye,
@@ -61,6 +63,8 @@ const TYPE_COLORS: Record<string, string> = {
   audio: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 border-purple-200 dark:border-purple-800',
   document: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border-amber-200 dark:border-amber-800',
   normative: 'bg-slate-200 text-slate-700 dark:bg-slate-800/50 dark:text-slate-300 border-slate-300 dark:border-slate-700',
+  manual: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400 border-cyan-200 dark:border-cyan-800',
+  presentation: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800',
 }
 
 function ResourceTypeIcon({ type, className }: { type: string; className?: string }) {
@@ -71,6 +75,8 @@ function ResourceTypeIcon({ type, className }: { type: string; className?: strin
     case 'audio': return <Headphones className={className} />
     case 'normative': return <Scale className={className} />
     case 'document': return <File className={className} />
+    case 'manual': return <BookOpen className={className} />
+    case 'presentation': return <Presentation className={className} />
     default: return <FileText className={className} />
   }
 }
@@ -130,12 +136,14 @@ export function LibraryDetailView() {
   // Fetch related resources (same category, take 4, exclude current)
   useEffect(() => {
     if (!resource?.category) {
-      setRelated([])
-      setRelatedLoading(false)
+      Promise.resolve().then(() => {
+        setRelated([])
+        setRelatedLoading(false)
+      })
       return
     }
     let cancelled = false
-    setRelatedLoading(true)
+    Promise.resolve().then(() => setRelatedLoading(true))
     const p = new URLSearchParams()
     p.set('limit', '5')
     p.set('category', resource.category)
@@ -158,13 +166,12 @@ export function LibraryDetailView() {
     }
   }, [resource?.id, resource?.category])
 
-  const tags = useMemo(() => {
-    if (!resource?.tags) return []
-    return resource.tags
+  const tags = resource?.tags
+    ? resource.tags
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean)
-  }, [resource?.tags])
+    : []
 
   const handleDownload = async () => {
     if (!resource) return
@@ -185,8 +192,9 @@ export function LibraryDetailView() {
       })
       // In real app: window.location = res.data.fileUrl
       // For demo we just show the toast since fileUrl is '#'
-      if (res.data.fileUrl && res.data.fileUrl !== '#') {
-        window.open(res.data.fileUrl, '_blank', 'noopener,noreferrer')
+      const downloadUrl = safeResourceUrl(res.data.fileUrl)
+      if (downloadUrl) {
+        window.open(downloadUrl, '_blank', 'noopener,noreferrer')
       }
     } catch (e) {
       toast({
@@ -294,6 +302,8 @@ export function LibraryDetailView() {
           <Card className="overflow-hidden pt-0 gap-0">
             <div className="relative aspect-[16/7] overflow-hidden bg-muted">
               {resource.coverUrl ? (
+                // Library covers are administrator-provided remote URLs with no fixed host.
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={resource.coverUrl}
                   alt={resource.title}

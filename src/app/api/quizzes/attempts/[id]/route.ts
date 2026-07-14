@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { isAdminRole, isInstructorRole } from '@/server/auth/permissions'
 
 // GET /api/quizzes/attempts/[id] — get attempt with answers for review
 // Only returns full answers (correct options) if quiz.showAnswers is true OR user is tutor/admin
@@ -43,7 +44,7 @@ export async function GET(
 
     // Ownership: student can only see own attempt; tutor/admin can see any
     const isOwner = attempt.userId === user.id
-    const isStaff = user.role === 'tutor' || user.role === 'admin'
+    const isStaff = isAdminRole(user.role) || (isInstructorRole(user.role) && attempt.quiz.createdBy === user.id)
     if (!isOwner && !isStaff) {
       return err(403, 'Ruxsat yo\'q')
     }
@@ -132,6 +133,7 @@ export async function POST(
             id: true,
             title: true,
             passingScore: true,
+            timeLimitMin: true,
             showAnswers: true,
             courseId: true,
             createdBy: true,
@@ -152,9 +154,19 @@ export async function POST(
       return err(400, 'Bu urinish allaqachon yakunlangan')
     }
 
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - attempt.startedAt.getTime()) / 1000))
+    const allowedSeconds = Math.max(1, attempt.quiz.timeLimitMin) * 60 + 30
+    if (elapsedSeconds > allowedSeconds) {
+      await db.quizAttempt.updateMany({
+        where: { id: attempt.id, status: 'in_progress' },
+        data: { status: 'graded', score: 0, maxScore: 0, percentage: 0, passed: false, submittedAt: new Date(), timeSpentSec: elapsedSeconds },
+      })
+      return err(409, 'Test vaqti tugagan', { attemptId: attempt.id }, 'TIME_LIMIT_EXCEEDED')
+    }
+
     const body = await req.json()
     const answersInput = Array.isArray((body as Record<string, unknown>)?.answers)
-      ? ((body as Record<string, unknown>).answers as Array<Record<string, unknown>>)
+      ? ((body as Record<string, unknown>).answers as Array<Record<string, unknown>>).slice(0, 500)
       : []
 
     // Load questions for this quiz (with options, correct flags)
@@ -174,7 +186,7 @@ export async function POST(
         : []
       const textAnswer =
         typeof a.textAnswer === 'string' && a.textAnswer.trim().length > 0
-          ? a.textAnswer.trim()
+          ? a.textAnswer.trim().slice(0, 4000)
           : null
       submittedMap.set(qid, { selectedOptions, textAnswer })
     }
@@ -196,19 +208,21 @@ export async function POST(
       const correctOptions = q.options.filter((o) => o.isCorrect)
       const correctIds = correctOptions.map((o) => o.id)
       const correctTexts = correctOptions.map((o) => o.text.trim().toLowerCase())
+      const validOptionIds = new Set(q.options.map((option) => option.id))
+      const selectedOptions = [...new Set(submitted.selectedOptions.filter((optionId) => validOptionIds.has(optionId)))]
 
       let isCorrect = false
       let pointsAwarded = 0
 
       if (q.type === 'single_choice' || q.type === 'true_false') {
         // Correct if selected option isCorrect
-        const sel = submitted.selectedOptions[0]
+        const sel = selectedOptions[0]
         if (sel && correctIds.includes(sel)) {
           isCorrect = true
           pointsAwarded = q.points
         }
       } else if (q.type === 'multiple_choice') {
-        const sel = submitted.selectedOptions
+        const sel = selectedOptions
         const hasIncorrect = sel.some((s) => !correctIds.includes(s))
         const correctSelected = sel.filter((s) => correctIds.includes(s)).length
         if (sel.length === 0) {
@@ -237,8 +251,8 @@ export async function POST(
 
       answerRecords.push({
         questionId: q.id,
-        selectedOptions: submitted.selectedOptions.length
-          ? JSON.stringify(submitted.selectedOptions)
+        selectedOptions: selectedOptions.length
+          ? JSON.stringify(selectedOptions)
           : null,
         textAnswer: submitted.textAnswer,
         isCorrect,
@@ -257,18 +271,11 @@ export async function POST(
     )
 
     // Update attempt
-    await db.quizAttempt.update({
-      where: { id: attempt.id },
-      data: {
-        status: 'graded',
-        score: finalScore,
-        maxScore: finalMaxScore,
-        percentage,
-        passed,
-        submittedAt: new Date(),
-        timeSpentSec,
-      },
+    const finalized = await db.quizAttempt.updateMany({
+      where: { id: attempt.id, status: 'in_progress' },
+      data: { status: 'graded', score: finalScore, maxScore: finalMaxScore, percentage, passed, submittedAt: new Date(), timeSpentSec },
     })
+    if (finalized.count !== 1) return err(409, 'Bu urinish allaqachon yakunlangan', undefined, 'ATTEMPT_FINALIZED')
 
     // Create QuizAnswer records (delete any stale ones first if exists — though shouldn't happen)
     if (attempt.answers.length > 0) {

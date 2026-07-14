@@ -3,9 +3,9 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: "GidroEdu LMS — Malaka Oshirish Platformasi",
+  title: "GidroEdu LMS — Kasbiy rivojlanish platformasi",
   description:
-    "Gidrometeorologiya Texnikumining raqamli o'qitish va malaka oshirish platformasi. Kurslar, testlar, kutubxona, sertifikatlar.",
+    "Gidrometeorologiya mutaxassislari uchun raqamli o'qitish va malaka oshirish platformasi.",
   keywords: [
     "GidroEdu",
     "LMS",
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     "malaka oshirish",
     "sertifikat",
   ],
-  authors: [{ name: "Gidrometeorologiya Texnikumi" }],
+  authors: [{ name: "GidroEdu LMS" }],
   icons: {
     icon: "/logo.svg",
   },

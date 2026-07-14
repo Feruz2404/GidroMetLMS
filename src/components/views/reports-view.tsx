@@ -50,7 +50,7 @@ type ReportType = 'overview' | 'students' | 'courses' | 'quiz-results' | 'certif
 
 export function ReportsView() {
   const { t } = useTranslation()
-  const isAdmin = useAuth((s) => s.user?.role === 'admin')
+  const isAdmin = useAuth((s) => ['super_admin', 'administrator', 'admin'].includes(s.user?.role ?? ''))
   const [tab, setTab] = useState<ReportType>('overview')
   const [data, setData] = useState<Record<string, unknown>>({})
   const [loading, setLoading] = useState(true)

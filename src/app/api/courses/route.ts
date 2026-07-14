@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getCurrentUser, ok, err, logActivity, getClientIp } from '@/lib/auth'
+import { hasPermission, isInstructorRole, isLearnerRole, PERMISSIONS } from '@/server/auth/permissions'
 
 // GET /api/courses — paginated list with filters
 // Query: search, categoryId, level, status, page (1), limit (12), sort (newest|popular|title)
@@ -24,11 +25,11 @@ export async function GET(req: NextRequest) {
     const where: any = {}
     const and: any[] = []
 
-    if (user.role === 'student') {
+    if (isLearnerRole(user.role)) {
       where.status = 'published'
     } else if (status) {
       where.status = status
-    } else if (user.role === 'tutor') {
+    } else if (isInstructorRole(user.role)) {
       // tutors: published OR their own (any status)
       and.push({ OR: [{ status: 'published' }, { tutorId: user.id }, { createdBy: user.id }] })
     }
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
           category: { select: { id: true, name: true, slug: true, icon: true } },
           tutor: { select: { id: true, firstName: true, lastName: true, position: true, avatarUrl: true } },
           _count: { select: { enrollments: true, lessons: true } },
-          enrollments: user.role === 'student'
+          enrollments: isLearnerRole(user.role)
             ? { where: { userId: user.id }, select: { id: true, progress: true, status: true } }
             : false,
         },
@@ -93,7 +94,9 @@ export async function POST(req: NextRequest) {
   try {
     const user = await getCurrentUser(req)
     if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    if (!['tutor', 'admin'].includes(user.role)) return err(403, 'Ruxsat yo\'q')
+    if (!hasPermission(user.role, PERMISSIONS.COURSES_MANAGE_ALL) && !hasPermission(user.role, PERMISSIONS.COURSES_MANAGE_OWN)) {
+      return err(403, 'Ruxsat yo\'q')
+    }
 
     const body = await req.json()
     const {
@@ -129,7 +132,7 @@ export async function POST(req: NextRequest) {
         description: (description as string) ?? null,
         slug,
         categoryId: (categoryId as string) || null,
-        tutorId: (tutorId as string) || user.id,
+        tutorId: hasPermission(user.role, PERMISSIONS.COURSES_MANAGE_ALL) ? ((tutorId as string) || user.id) : user.id,
         thumbnailUrl: (thumbnailUrl as string) ?? null,
         durationHours: Number(durationHours) || 0,
         level: (level as string) || 'beginner',
