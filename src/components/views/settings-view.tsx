@@ -37,9 +37,7 @@ export function SettingsView() {
   const [passwords, setPasswords] = useState({ current: '', next: '', confirm: '' })
 
   const roleLabel = (role: string) => {
-    if (role === 'admin') return t('role.admin')
-    if (role === 'tutor') return t('role.tutor')
-    return t('role.student')
+    return t(`role.${role}`)
   }
 
   const saveProfile = async (e: React.FormEvent) => {
@@ -97,7 +95,7 @@ export function SettingsView() {
           <TabsTrigger value="profile"><User className="w-4 h-4 mr-2" /> {t('settings.tab.profile')}</TabsTrigger>
           <TabsTrigger value="password"><Lock className="w-4 h-4 mr-2" /> {t('settings.tab.password')}</TabsTrigger>
           <TabsTrigger value="notifications"><Bell className="w-4 h-4 mr-2" /> {t('settings.tab.notifications')}</TabsTrigger>
-          {user.role === 'admin' && <TabsTrigger value="system"><Database className="w-4 h-4 mr-2" /> {t('settings.tab.system')}</TabsTrigger>}
+          {['super_admin', 'administrator', 'admin'].includes(user.role) && <TabsTrigger value="system"><Database className="w-4 h-4 mr-2" /> {t('settings.tab.system')}</TabsTrigger>}
         </TabsList>
 
         {/* Profile */}
@@ -223,7 +221,7 @@ export function SettingsView() {
         </TabsContent>
 
         {/* System (admin) */}
-        {user.role === 'admin' && (
+        {['super_admin', 'administrator', 'admin'].includes(user.role) && (
           <TabsContent value="system">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
               <Card>

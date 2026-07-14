@@ -75,7 +75,7 @@ export function CertificatesView() {
   const { toast } = useToast()
   const { t } = useTranslation()
 
-  const isStaff = user.role === 'tutor' || user.role === 'admin'
+  const isStaff = ['super_admin', 'administrator', 'instructor', 'department_manager', 'admin', 'tutor'].includes(user.role)
 
   const [certificates, setCertificates] = useState<Certificate[]>([])
   const [loading, setLoading] = useState(true)

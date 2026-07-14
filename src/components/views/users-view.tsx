@@ -88,9 +88,7 @@ export function UsersView() {
   const [actionLoading, setActionLoading] = useState(false)
 
   const roleLabel = (role: string) => {
-    if (role === 'admin') return t('role.admin')
-    if (role === 'tutor') return t('role.tutor')
-    return t('role.student')
+    return t(`role.${role}`)
   }
 
   const fetchUsers = async () => {
@@ -180,6 +178,11 @@ export function UsersView() {
             <SelectItem value="admin">{t('role.admin')}</SelectItem>
             <SelectItem value="tutor">{t('role.tutor')}</SelectItem>
             <SelectItem value="student">{t('role.student')}</SelectItem>
+            <SelectItem value="super_admin">{t('role.super_admin')}</SelectItem>
+            <SelectItem value="administrator">{t('role.administrator')}</SelectItem>
+            <SelectItem value="instructor">{t('role.instructor')}</SelectItem>
+            <SelectItem value="department_manager">{t('role.department_manager')}</SelectItem>
+            <SelectItem value="learner">{t('role.learner')}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1) }}>
@@ -309,7 +312,7 @@ function CreateUserDialog({ onSuccess }: { onSuccess: () => void }) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
-    email: '', username: '', password: '', role: 'student',
+    email: '', username: '', password: '', role: 'learner',
     firstName: '', lastName: '', middleName: '', phone: '', department: '', position: '',
   })
 
@@ -368,9 +371,10 @@ function CreateUserDialog({ onSuccess }: { onSuccess: () => void }) {
             <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="student">{t('role.student')}</SelectItem>
-                <SelectItem value="tutor">{t('role.tutor')}</SelectItem>
-                <SelectItem value="admin">{t('role.admin')}</SelectItem>
+                <SelectItem value="learner">{t('role.learner')}</SelectItem>
+                <SelectItem value="instructor">{t('role.instructor')}</SelectItem>
+                <SelectItem value="department_manager">{t('role.department_manager')}</SelectItem>
+                <SelectItem value="administrator">{t('role.administrator')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -441,6 +445,10 @@ function EditUserDialog({ user, onSuccess }: { user: UserRow; onSuccess: () => v
           <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
+              <SelectItem value="learner">{t('role.learner')}</SelectItem>
+              <SelectItem value="instructor">{t('role.instructor')}</SelectItem>
+              <SelectItem value="department_manager">{t('role.department_manager')}</SelectItem>
+              <SelectItem value="administrator">{t('role.administrator')}</SelectItem>
               <SelectItem value="student">{t('role.student')}</SelectItem>
               <SelectItem value="tutor">{t('role.tutor')}</SelectItem>
               <SelectItem value="admin">{t('role.admin')}</SelectItem>

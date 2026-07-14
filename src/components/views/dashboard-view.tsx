@@ -152,8 +152,8 @@ export function DashboardView() {
     )
   }
 
-  if (data.role === 'student') return <StudentDashboard data={data} onNavigate={navigate} />
-  if (data.role === 'tutor') return <TutorDashboard data={data} onNavigate={navigate} />
+  if (['student', 'learner'].includes(data.role)) return <StudentDashboard data={data} onNavigate={navigate} />
+  if (['tutor', 'instructor'].includes(data.role)) return <TutorDashboard data={data} onNavigate={navigate} />
   return <AdminDashboard data={data} onNavigate={navigate} />
 }
 
@@ -241,6 +241,8 @@ function StudentDashboard({ data, onNavigate }: { data: DashboardData; onNavigat
                 className="w-full flex items-center gap-4 p-3 rounded-lg border border-border hover:bg-accent transition-colors text-left"
               >
                 {e.course.thumbnailUrl ? (
+                  // Course images are administrator-provided remote URLs with no fixed host.
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img src={e.course.thumbnailUrl} alt="" className="w-14 h-14 rounded-lg object-cover" />
                 ) : (
                   <div className="w-14 h-14 rounded-lg bg-primary/10 flex items-center justify-center">

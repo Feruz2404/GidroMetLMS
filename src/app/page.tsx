@@ -43,9 +43,9 @@ export default function Home() {
     if (!user) return
     const adminOnly = ['users']
     const staffOnly = ['reports']
-    if (adminOnly.includes(view) && user.role !== 'admin') {
+    if (adminOnly.includes(view) && !['super_admin', 'administrator', 'admin'].includes(user.role)) {
       navigate('dashboard')
-    } else if (staffOnly.includes(view) && user.role === 'student') {
+    } else if (staffOnly.includes(view) && ['student', 'learner'].includes(user.role)) {
       navigate('dashboard')
     }
   }, [user, view, navigate])

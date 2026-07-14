@@ -34,7 +34,7 @@ import {
   Menu,
   User,
 } from 'lucide-react'
-import { cn } from '@/lib/utils'
+import { cn, safeResourceUrl } from '@/lib/utils'
 
 interface CourseSection {
   id: string
@@ -160,7 +160,8 @@ export function CourseDetailView() {
   }, [courseId])
 
   const isEnrolled = !!course?.enrollment
-  const isOwner = user.role === 'admin' || (user.role === 'tutor' && course?.tutor?.id === user.id)
+  const isOwner = ['super_admin', 'administrator', 'admin'].includes(user.role) ||
+    (['instructor', 'tutor'].includes(user.role) && course?.tutor?.id === user.id)
 
   // Find selected lesson
   const selectedLesson = useMemo(() => {
@@ -300,6 +301,8 @@ export function CourseDetailView() {
       <Card className="overflow-hidden pt-0 gap-0">
         <div className="relative h-48 sm:h-64 lg:h-72 bg-muted">
           {course.thumbnailUrl ? (
+            // Course images are administrator-provided remote URLs with no fixed host.
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={course.thumbnailUrl}
               alt={course.title}
@@ -365,18 +368,18 @@ export function CourseDetailView() {
               </p>
             </div>
             <div className="flex-shrink-0">
-              {user.role === 'student' && !isEnrolled && (
+              {['student', 'learner'].includes(user.role) && !isEnrolled && (
                 <Button onClick={handleEnroll} size="lg">
                   <GraduationCap className="w-4 h-4" /> {t('courses.enroll')}
                 </Button>
               )}
-              {user.role === 'student' && isEnrolled && (
+              {['student', 'learner'].includes(user.role) && isEnrolled && (
                 <div className="text-right">
                   <div className="text-xs text-muted-foreground">{t('courses.yourProgress')}</div>
                   <div className="text-2xl font-bold text-primary">{course.enrollment!.progress}%</div>
                 </div>
               )}
-              {(user.role === 'tutor' || user.role === 'admin') && (
+              {['super_admin', 'administrator', 'instructor', 'admin', 'tutor'].includes(user.role) && (
                 <Badge variant="secondary" className="capitalize">
                   {t('common.status')}: {course.status}
                 </Badge>
@@ -447,7 +450,7 @@ export function CourseDetailView() {
                 <p className="text-sm text-muted-foreground max-w-md">
                   {t('courses.selectLessonDesc')}
                 </p>
-                {!isEnrolled && user.role === 'student' && (
+                {!isEnrolled && ['student', 'learner'].includes(user.role) && (
                   <div className="mt-2 p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 max-w-md">
                     <Lock className="w-5 h-5 text-amber-600 mx-auto mb-2" />
                     <p className="text-sm text-amber-700 dark:text-amber-400">
@@ -597,6 +600,8 @@ function LessonViewer({
 }) {
   const { t } = useTranslation()
   const videoRef = useRef<HTMLVideoElement>(null)
+  const videoUrl = safeResourceUrl(lesson.videoUrl)
+  const fileUrl = safeResourceUrl(lesson.fileUrl)
   const lastSaveRef = useRef<number>(0)
   const watchTimeRef = useRef<number>(lesson.progress?.watchTimeSec ?? 0)
   const isCompleted = lesson.progress?.isCompleted
@@ -631,8 +636,8 @@ function LessonViewer({
   const handleVideoTimeUpdate = useCallback(
     (e: React.SyntheticEvent<HTMLVideoElement>) => {
       const v = e.currentTarget
-      // Accumulate watch time
-      watchTimeRef.current += 1
+      // Track the furthest observed playback position as watched seconds.
+      watchTimeRef.current = Math.max(watchTimeRef.current, v.currentTime)
       saveVideoProgress(v.currentTime, watchTimeRef.current)
     },
     [saveVideoProgress]
@@ -695,12 +700,12 @@ function LessonViewer({
       <CardContent className="p-0">
         {/* Lesson content */}
         <div className="p-4 sm:p-6">
-          {lesson.type === 'video' && lesson.videoUrl ? (
+          {lesson.type === 'video' && videoUrl ? (
             <div className="space-y-3">
               <div className="relative aspect-video bg-black rounded-lg overflow-hidden">
                 <video
                   ref={videoRef}
-                  src={lesson.videoUrl}
+                  src={videoUrl}
                   controls
                   className="w-full h-full"
                   onTimeUpdate={handleVideoTimeUpdate}
@@ -733,9 +738,9 @@ function LessonViewer({
                 <p className="text-sm text-muted-foreground mt-1 max-w-md">
                   {t('courses.pdfDesc')}
                 </p>
-                {lesson.fileUrl ? (
+                {fileUrl ? (
                   <Button asChild className="mt-4">
-                    <a href={lesson.fileUrl} download target="_blank" rel="noopener noreferrer">
+                    <a href={fileUrl} download target="_blank" rel="noopener noreferrer">
                       <Download className="w-4 h-4" /> {t('common.download')}
                     </a>
                   </Button>

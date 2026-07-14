@@ -8,187 +8,143 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Droplets, GraduationCap, BookOpen, Award, Loader2, LogIn, Shield } from 'lucide-react'
+import { Award, BookOpen, ChartNoAxesCombined, ClipboardCheck, Droplets, Library, Loader2, LogIn, ShieldCheck } from 'lucide-react'
 import { ApiError } from '@/lib/api'
-import { useToast } from '@/hooks/use-toast'
 
-// Demo accounts are distributed by the administrator — never hardcode credentials in production
-
-// OneID is disabled until credentials are provided in .env
-const ONEID_ENABLED = false
+const FEATURES = [
+  { icon: BookOpen, title: 'landing.courses', description: 'landing.coursesDesc' },
+  { icon: ClipboardCheck, title: 'landing.assessment', description: 'landing.assessmentDesc' },
+  { icon: ChartNoAxesCombined, title: 'landing.monitoring', description: 'landing.monitoringDesc' },
+  { icon: Library, title: 'landing.library', description: 'landing.libraryDesc' },
+  { icon: Award, title: 'landing.certificates', description: 'landing.certificatesDesc' },
+] as const
 
 export function LoginView() {
-  const login = useAuth((s) => s.login)
-  const loading = useAuth((s) => s.loading)
-  const navigate = useNav((s) => s.navigate)
+  const login = useAuth((state) => state.login)
+  const loading = useAuth((state) => state.loading)
+  const navigate = useNav((state) => state.navigate)
   const { t } = useTranslation()
-  const { toast } = useToast()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
     setError('')
     try {
-      await login(email, password)
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : t('auth.invalidCredentials'))
+      await login(email.trim(), password)
+    } catch (reason) {
+      setError(reason instanceof ApiError ? reason.message : t('auth.invalidCredentials'))
     }
-  }
-
-  const handleOneID = () => {
-    if (!ONEID_ENABLED) {
-      toast({ title: t('auth.oneidDisabled'), description: t('auth.oneidComingSoon') })
-      return
-    }
-    // Real OneID flow would redirect to: /api/auth/oneid
-    // window.location.href = '/api/auth/oneid'
   }
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row">
-      {/* Left — Hero */}
-      <div className="lg:w-1/2 bg-gradient-to-br from-teal-700 via-teal-800 to-cyan-900 text-white p-8 lg:p-12 flex flex-col justify-between relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute -top-20 -right-20 w-96 h-96 rounded-full bg-white blur-3xl" />
-          <div className="absolute bottom-0 -left-20 w-80 h-80 rounded-full bg-cyan-300 blur-3xl" />
-        </div>
-        <div className="relative z-10 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center ring-1 ring-white/30">
-              <Droplets className="w-7 h-7" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold leading-tight">{t('app.name')}</h1>
-              <p className="text-xs text-teal-100">{t('app.institution')}</p>
-            </div>
-          </div>
-          <LanguageSwitcher />
-        </div>
-
-        <div className="relative z-10 my-8 lg:my-0">
-          <h2 className="text-3xl lg:text-5xl font-bold leading-tight mb-4">
-            {t('app.tagline')}
-          </h2>
-          <p className="text-teal-100 text-base lg:text-lg max-w-md mb-8">
-            {t('app.institution')}
-          </p>
-
-          <div className="grid grid-cols-2 gap-4 max-w-md">
-            {[
-              { icon: BookOpen, value: '6+', key: 'nav.courses' },
-              { icon: GraduationCap, value: '500', key: 'role.student' },
-              { icon: Award, value: '∞', key: 'nav.certificates' },
-              { icon: Droplets, value: '6', key: 'nav.dashboard' },
-            ].map((s) => (
-              <div key={s.key} className="bg-white/10 backdrop-blur rounded-xl p-4 ring-1 ring-white/20">
-                <s.icon className="w-5 h-5 mb-2 text-teal-200" />
-                <div className="text-2xl font-bold">{s.value}</div>
-                <div className="text-xs text-teal-100">{t(s.key)}</div>
+    <main className="min-h-screen bg-slate-50 text-slate-950">
+      <div className="mx-auto grid min-h-screen max-w-[1600px] lg:grid-cols-[minmax(0,1.2fr)_minmax(390px,0.8fr)]">
+        <section className="relative overflow-hidden border-b border-slate-200 bg-slate-950 px-5 py-7 text-white sm:px-10 lg:border-b-0 lg:border-r lg:px-14 lg:py-10">
+          <div className="absolute inset-x-0 top-0 h-1 bg-cyan-500" />
+          <div className="relative flex h-full flex-col">
+            <header className="flex items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-400/10">
+                  <Droplets className="h-6 w-6 text-cyan-300" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-lg font-semibold tracking-tight">{t('app.name')}</p>
+                  <p className="truncate text-xs text-slate-400">{t('app.institution')}</p>
+                </div>
               </div>
-            ))}
+              <LanguageSwitcher />
+            </header>
+
+            <div className="my-auto py-12 lg:py-16">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-cyan-300">{t('landing.eyebrow')}</p>
+              <h1 className="max-w-3xl text-3xl font-semibold leading-tight tracking-tight sm:text-4xl lg:text-5xl">
+                {t('landing.title')}
+              </h1>
+              <p className="mt-5 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">{t('landing.description')}</p>
+
+              <div className="mt-9 grid max-w-3xl gap-px overflow-hidden rounded-xl border border-slate-700 bg-slate-700 sm:grid-cols-2">
+                {FEATURES.map(({ icon: Icon, title, description }) => (
+                  <article key={title} className="bg-slate-900 p-4 sm:p-5">
+                    <Icon className="mb-3 h-5 w-5 text-cyan-300" aria-hidden="true" />
+                    <h2 className="text-sm font-semibold text-white">{t(title)}</h2>
+                    <p className="mt-1 text-xs leading-5 text-slate-400">{t(description)}</p>
+                  </article>
+                ))}
+                <article className="flex items-center gap-3 bg-slate-900 p-4 sm:p-5">
+                  <ShieldCheck className="h-7 w-7 shrink-0 text-emerald-300" aria-hidden="true" />
+                  <p className="text-xs leading-5 text-slate-300">{t('landing.accessNote')}</p>
+                </article>
+              </div>
+            </div>
+
+            <footer className="text-xs text-slate-500">{t('app.footer')}</footer>
           </div>
-        </div>
+        </section>
 
-        <div className="relative z-10 text-xs text-teal-200">
-          {t('app.footer')}
-        </div>
-      </div>
-
-      {/* Right — Login form */}
-      <div className="lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-muted/30">
-        <div className="w-full max-w-md">
-          <Card className="shadow-xl border-border/60">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-2xl">{t('auth.login')}</CardTitle>
-              <CardDescription>{t('auth.loginSubtitle')}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="email">{t('auth.email')}</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="admin@gidroedu.uz"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    autoComplete="email"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">{t('auth.password')}</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
-                  />
-                </div>
-
-                {error && (
-                  <div className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2 border border-destructive/20">
-                    {error}
+        <section className="flex items-center justify-center px-5 py-10 sm:px-10 lg:px-14" aria-labelledby="login-title">
+          <div className="w-full max-w-md">
+            <div className="mb-7 lg:hidden">
+              <p className="text-sm font-medium text-slate-600">{t('landing.eyebrow')}</p>
+            </div>
+            <Card className="border-slate-200 shadow-sm">
+              <CardHeader className="pb-5">
+                <CardTitle id="login-title" className="text-2xl">{t('auth.login')}</CardTitle>
+                <CardDescription>{t('auth.loginSubtitle')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">{t('auth.email')}</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      required
+                      maxLength={254}
+                      autoComplete="username"
+                      inputMode="email"
+                    />
                   </div>
-                )}
+                  <div className="space-y-2">
+                    <Label htmlFor="password">{t('auth.password')}</Label>
+                    <Input
+                      id="password"
+                      type="password"
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      required
+                      maxLength={256}
+                      autoComplete="current-password"
+                    />
+                  </div>
 
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('common.loading')}</>
-                  ) : (
-                    <><LogIn className="w-4 h-4 mr-2" /> {t('auth.loginButton')}</>
+                  {error && (
+                    <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                      {error}
+                    </p>
                   )}
-                </Button>
-              </form>
 
-              {/* OneID button */}
-              <div className="mt-4">
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">OneID</span>
-                  </div>
+                  <Button type="submit" className="min-h-11 w-full" disabled={loading}>
+                    {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <LogIn className="mr-2 h-4 w-4" aria-hidden="true" />}
+                    {loading ? t('common.loading') : t('auth.loginButton')}
+                  </Button>
+                </form>
+
+                <div className="mt-6 border-t border-slate-200 pt-5">
+                  <Button type="button" variant="outline" className="w-full" onClick={() => navigate('certificate-verify')}>
+                    <Award className="mr-2 h-4 w-4" aria-hidden="true" />
+                    {t('landing.verify')}
+                  </Button>
+                  <p className="mt-4 text-center text-xs leading-5 text-slate-500">{t('landing.accessNote')}</p>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full mt-3"
-                  onClick={handleOneID}
-                  disabled={!ONEID_ENABLED}
-                >
-                  <Shield className="w-4 h-4 mr-2" />
-                  {t('auth.oneidLogin')}
-                </Button>
-              </div>
-
-              {/* Register link */}
-              <div className="mt-4 text-center text-sm text-muted-foreground">
-                {t('auth.noAccount')}{' '}
-                <button
-                  onClick={() => navigate('register')}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {t('auth.register')}
-                </button>
-              </div>
-
-              {/* Demo note */}
-              <div className="mt-6 pt-6 border-t border-border">
-                <p className="text-xs text-muted-foreground text-center">
-                  {t('auth.demoAccountsNotice')}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
       </div>
-    </div>
+    </main>
   )
 }

@@ -244,7 +244,7 @@ export function LibraryView() {
             <Star className={cn('w-4 h-4', bookmarksOnly && 'fill-current')} />
             {t('common.myBookmarks')}
           </Button>
-          {(user.role === 'tutor' || user.role === 'admin') && (
+          {['super_admin', 'administrator', 'instructor', 'admin', 'tutor'].includes(user.role) && (
             <Button onClick={handleCreate}>
               <Plus className="w-4 h-4" /> {t('library.newResource')}
             </Button>
@@ -480,6 +480,8 @@ function ResourceCard({
       {/* Cover / icon header */}
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
         {resource.coverUrl ? (
+          // Library covers are administrator-provided remote URLs with no fixed host.
+          // eslint-disable-next-line @next/next/no-img-element
           <img
             src={resource.coverUrl}
             alt={resource.title}
