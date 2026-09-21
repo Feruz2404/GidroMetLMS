@@ -22,6 +22,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useTranslation } from '@/lib/i18n'
 import { cn } from '@/lib/utils'
+import { buildMockVerifyData, getMockCertificateByHash } from '@/lib/mock-certificates'
 
 // Verify endpoint response shape (public)
 type VerifyResponse =
@@ -89,6 +90,20 @@ export function CertificateVerifyView() {
       return
     }
     let cancelled = false
+    // Sample certificates live only on the client — resolve them without an API call.
+    const mockCert = getMockCertificateByHash(hash)
+    if (mockCert) {
+      const mockData = buildMockVerifyData(mockCert, user)
+      Promise.resolve().then(() => {
+        if (cancelled) return
+        setData(mockData)
+        setNotFound(false)
+        setLoading(false)
+      })
+      return () => {
+        cancelled = true
+      }
+    }
     Promise.resolve().then(() => {
       if (!cancelled) setLoading(true)
     })
@@ -110,6 +125,8 @@ export function CertificateVerifyView() {
     return () => {
       cancelled = true
     }
+    // `user` only affects the displayed name on sample certificates.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hash])
 
   // Trigger print if requested (after data loads)

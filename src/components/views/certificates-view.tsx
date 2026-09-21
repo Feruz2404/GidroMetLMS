@@ -51,6 +51,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useTranslation } from '@/lib/i18n'
+import { MOCK_CERTIFICATES, isMockCertificate } from '@/lib/mock-certificates'
 
 interface CertificatesResponse {
   status: string
@@ -68,6 +69,13 @@ interface AutoGenResponse {
 }
 
 const PAGE_SIZE = 12
+
+// Learners see a few sample certificates after their real ones (first page only)
+// so the section is never empty. Staff registry stays DB-only.
+function withSampleCertificates(real: Certificate[], isStaff: boolean, page: number): Certificate[] {
+  if (isStaff || page !== 1) return real
+  return [...real, ...MOCK_CERTIFICATES]
+}
 
 export function CertificatesView() {
   const user = useAuth((s) => s.user)!
@@ -125,7 +133,7 @@ export function CertificatesView() {
       .get<CertificatesResponse>(`/certificates?${queryString}`)
       .then((r) => {
         if (cancelled) return
-        setCertificates(r.data ?? [])
+        setCertificates(withSampleCertificates(r.data ?? [], isStaff, page))
         if (r.meta) setMeta({ total: r.meta.total, pages: r.meta.pages })
       })
       .catch((e) => {
@@ -135,7 +143,7 @@ export function CertificatesView() {
           description: (e as Error).message || t('certificates.loadFailed'),
           variant: 'destructive',
         })
-        setCertificates([])
+        setCertificates(withSampleCertificates([], isStaff, page))
       })
       .finally(() => {
         if (!cancelled) setLoading(false)
@@ -391,6 +399,7 @@ function StudentCertCard({
   const { t } = useTranslation()
   const primary = cert.template?.primaryColor ?? '#0f766e'
   const accent = cert.template?.accentColor ?? '#ca8a04'
+  const isSample = isMockCertificate(cert)
   const studentName = useAuth((s) => s.user)
   const fullName = studentName
     ? `${studentName.lastName} ${studentName.firstName}`.trim()
@@ -422,7 +431,14 @@ function StudentCertCard({
               {cert.template?.titleText ?? t('certificates.certificate')}
             </p>
           </div>
-          <Award className="w-7 h-7 opacity-80" style={{ color: accent }} />
+          <div className="flex items-center gap-2">
+            {isSample && (
+              <Badge className="text-[10px] px-1.5 py-0 bg-white/20 text-white border-white/30 hover:bg-white/20">
+                {t('certificates.sample')}
+              </Badge>
+            )}
+            <Award className="w-7 h-7 opacity-80" style={{ color: accent }} />
+          </div>
         </div>
         <div className="relative">
           <p className="text-[11px] opacity-75 line-clamp-1">{fullName}</p>
