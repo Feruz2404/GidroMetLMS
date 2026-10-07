@@ -1,6 +1,7 @@
+import './load-env'
 import { PrismaClient } from '@prisma/client'
-import { hashPassword } from '../src/lib/auth'
-import { passwordSchema } from '../src/validators/auth'
+import { hashPassword } from '../src/server/auth/password'
+import { passwordSchema } from '../src/shared/schemas'
 
 const prisma = new PrismaClient()
 
@@ -25,7 +26,7 @@ async function createInitialAdministrator() {
     data: {
       email,
       username,
-      passwordHash: hashPassword(parsedPassword.data),
+      passwordHash: await hashPassword(parsedPassword.data),
       role: 'super_admin',
       firstName: process.env.INITIAL_ADMIN_FIRST_NAME?.trim() || 'System',
       lastName: process.env.INITIAL_ADMIN_LAST_NAME?.trim() || 'Administrator',

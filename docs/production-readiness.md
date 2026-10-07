@@ -1,22 +1,23 @@
 # Production readiness and known limitations
 
-## Completed hardening
+## In place
 
-- HttpOnly cookie sessions with legacy bearer compatibility.
-- Stronger versioned password hashing and automatic legacy rehash.
-- Generic login failures, rate limiting, session revocation, and audit records.
-- Central role/permission matrix with instructor ownership and department scope.
-- Server-derived certificate eligibility and quiz scoring.
-- Server time-limit enforcement and duplicate quiz-submission protection.
-- Non-destructive, gated, repeatable demo seed with fictional data.
-- Schema-drift check, dependency audit, security headers, health endpoint, and CI checks.
-- Responsive public access experience without fabricated statistics.
+- HttpOnly, SameSite=Lax, Secure (production) session cookies; tokens stored only as HMAC; sessions revoked on deactivation and on password change (other devices).
+- PBKDF2-SHA-256 (600 000 iterations, async) with automatic upgrade of legacy hashes; strong password policy; administrator-issued passwords must be changed at first sign-in.
+- Generic sign-in errors, per IP+email rate limiting, same-origin enforcement for cookie-authenticated mutations, strict security headers and CSP (no third-party scripts; QR codes generated locally).
+- Server-side authorization for every endpoint, including instructor ownership, department scope for managers and learner self-scope.
+- Validated input everywhere (shared zod schemas); malformed JSON returns 400; uniform error envelope with stable codes and localized client messages.
+- Server-graded assessments with no answer leakage, autosave/resume, deadline enforcement and duplicate-submission protection.
+- One certificate eligibility rule, automatic issuance, revocation, public verification.
+- Audit log of security-relevant and authoring actions; `/api/health` readiness probe.
+- Real learning catalogue (18 courses, 162 lessons, 180 questions, 25 official documents) with an idempotent, non-destructive initializer.
+- Unit tests for domain rules plus Playwright API and browser tests; CI runs type checks, lint, tests, content validation, migrations, seed, build and e2e.
 
 ## Known limitations
 
-- Assignment submissions, grading, certificate PDF generation/reissue history, password-reset email delivery, OneID, organization tables, attendance, competency, learning groups, and training plans are not yet implemented as complete production workflows.
-- The current page architecture remains a compatibility-preserving single client entry point; gradual extraction to route-based Server Components is recommended.
-- Login rate limiting is process-local. A shared provider is required for horizontally scaled abuse protection.
-- The reviewed Prisma baseline is committed, but an existing production database created with `db push` still requires a verified backup, schema comparison, and `migrate resolve` before its first `migrate deploy`.
-- Uploaded-file storage and malware scanning require an approved object-storage provider; no production upload credentials are included.
-- WCAG and responsive checks need ongoing manual verification with representative authenticated data and assistive technology.
+- File uploads are not stored by the platform: lessons and library records link to vetted `https` URLs (official documents, videos). Hosting private files needs an approved object store with malware scanning.
+- Login rate limiting is in-process. Horizontally scaled deployments need a shared store (e.g. Redis) behind `server/auth/rate-limit.ts`.
+- Video watch time is measured as active viewing time on the lesson page; YouTube player events are not used.
+- Assignments with manual grading, learning paths, attendance and OneID sign-in are not implemented. The OneID environment variables are placeholders only.
+- Notification e-mail and password-reset e-mail are not sent; administrators reset passwords in the user directory.
+- Existing Production databases created with `db push` still need the documented baseline step before the first `migrate deploy` (see `docs/deployment.md`).

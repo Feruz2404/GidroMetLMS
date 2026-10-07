@@ -1,71 +1,40 @@
-import { db, getDatabaseConfigStatus, getPrismaErrorDetails } from '@/lib/db'
-import { isSessionSecretConfigured } from '@/lib/auth'
-import { logServerError } from '@/lib/server-log'
-import { getDeploymentEnvironment, resolveApplicationUrl } from '@/lib/environment'
+import { isSessionSecretConfigured } from '@/server/auth/session'
+import { getDeploymentEnvironment, resolveApplicationUrl } from '@/server/config/environment'
+import { db, getDatabaseConfigStatus, getPrismaErrorDetails } from '@/server/db'
+import { logServerError } from '@/server/log'
 
+// GET /api/health — readiness: configuration and database reachability, never secret values.
 export async function GET() {
-  const databaseConfig = getDatabaseConfigStatus()
+  const database = getDatabaseConfigStatus()
   const sessionSecretConfigured = isSessionSecretConfigured()
-  const deploymentEnvironment = getDeploymentEnvironment()
   const applicationUrlConfigured = Boolean(resolveApplicationUrl())
   let databaseReachable = false
   let databaseErrorCode: string | null = null
 
-  const canCheckDatabase =
-    databaseConfig.databaseUrlConfigured &&
-    databaseConfig.databaseUrlSupported &&
-    (!databaseConfig.productionRequiresPostgres || databaseConfig.databaseUrlProductionReady)
-
-  if (canCheckDatabase) {
+  if (database.databaseUrlConfigured && database.databaseUrlSupported) {
     try {
       await db.$queryRaw`SELECT 1`
       databaseReachable = true
-    } catch (e) {
-      const details = getPrismaErrorDetails(e)
-      databaseErrorCode = details.code ?? 'DATABASE_CHECK_FAILED'
-      logServerError('health.database', e, { code: databaseErrorCode })
+    } catch (error) {
+      databaseErrorCode = getPrismaErrorDetails(error).code ?? 'DATABASE_CHECK_FAILED'
+      logServerError('health.database', error, { code: databaseErrorCode })
     }
   }
 
-  const healthy =
-    databaseConfig.databaseUrlConfigured &&
-    databaseConfig.databaseUrlSupported &&
-    (!databaseConfig.productionRequiresPostgres || databaseConfig.databaseUrlProductionReady) &&
-    sessionSecretConfigured &&
-    applicationUrlConfigured &&
-    databaseReachable
-
-  const response = Response.json(
+  const healthy = databaseReachable && sessionSecretConfigured && applicationUrlConfigured
+  return Response.json(
     {
       status: healthy ? 'ok' : 'degraded',
       checks: {
         app: true,
         databaseReachable,
         databaseErrorCode,
-        env: {
-          databaseUrlConfigured: databaseConfig.databaseUrlConfigured,
-          databaseUrlSource: databaseConfig.databaseUrlSource,
-          databaseUrlSupported: databaseConfig.databaseUrlSupported,
-          databaseUrlProductionReady: databaseConfig.databaseUrlProductionReady,
-          productionRequiresPostgres: databaseConfig.productionRequiresPostgres,
-          directUrlConfigured: databaseConfig.directUrlConfigured,
-          directUrlSource: databaseConfig.directUrlSource,
-          databaseProvider: databaseConfig.databaseProvider,
-          runtimeConnectionType: databaseConfig.runtimeConnectionType,
-          migrationConnectionType: databaseConfig.migrationConnectionType,
-          databaseSslEnabled: databaseConfig.databaseSslEnabled,
-          sameDatabaseEnvironment: databaseConfig.sameDatabaseEnvironment,
-          sessionSecretConfigured,
-          applicationUrlConfigured,
-          deploymentEnvironment,
-        },
+        env: { ...database, sessionSecretConfigured, applicationUrlConfigured, deploymentEnvironment: getDeploymentEnvironment() },
       },
       timestamp: new Date().toISOString(),
     },
-    { status: healthy ? 200 : 503 }
+    { status: healthy ? 200 : 503, headers: { 'Cache-Control': 'no-store, max-age=0' } }
   )
-  response.headers.set('Cache-Control', 'no-store, max-age=0')
-  return response
 }
 
 export const dynamic = 'force-dynamic'

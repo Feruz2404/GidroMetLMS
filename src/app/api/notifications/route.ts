@@ -1,56 +1,18 @@
-import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
-import { getCurrentUser, ok, err } from '@/lib/auth'
+import { z } from 'zod'
+import { authedRoute } from '@/server/http/handler'
+import { parseQuery } from '@/server/http/request'
+import { ok } from '@/server/http/response'
+import { listNotifications, markAllRead } from '@/server/modules/notifications/service'
 
-// GET /api/notifications — current user's notifications
-export async function GET(req: NextRequest) {
-  try {
-    const user = await getCurrentUser(req)
-    if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
+const listQuery = z.object({
+  filter: z.enum(['all', 'unread']).catch('all').default('all'),
+  limit: z.coerce.number().int().min(1).max(100).catch(50).default(50),
+})
 
-    const { searchParams } = new URL(req.url)
-    const filter = searchParams.get('filter') ?? 'all' // all | unread
+export const GET = authedRoute(async (req, { user }) => {
+  const { filter, limit } = parseQuery(req, listQuery)
+  return ok(await listNotifications(user.id, { unreadOnly: filter === 'unread', limit }))
+})
 
-    const where = filter === 'unread' ? { userId: user.id, isRead: false } : { userId: user.id }
-
-    const [notifications, unreadCount] = await Promise.all([
-      db.notification.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: 50,
-      }),
-      db.notification.count({ where: { userId: user.id, isRead: false } }),
-    ])
-
-    return ok({ notifications, unreadCount })
-  } catch (e) {
-    if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
-      return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
-    }
-    console.error('Notifications list error:', e)
-    return err(500, 'Server xatosi')
-  }
-}
-
-// POST /api/notifications — mark all as read
-export async function POST(req: NextRequest) {
-  try {
-    const user = await getCurrentUser(req)
-    if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-
-    await db.notification.updateMany({
-      where: { userId: user.id, isRead: false },
-      data: { isRead: true },
-    })
-
-    return ok({ success: true })
-  } catch (e) {
-    if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
-      return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
-    }
-    console.error('Notifications mark all error:', e)
-    return err(500, 'Server xatosi')
-  }
-}
-
-export const dynamic = 'force-dynamic'
+// POST /api/notifications — mark all as read.
+export const POST = authedRoute(async (_req, { user }) => ok(await markAllRead(user.id)))

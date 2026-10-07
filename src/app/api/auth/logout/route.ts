@@ -1,16 +1,10 @@
-import { NextRequest } from 'next/server'
-import { handleApiError, logoutRequest } from '@/lib/auth'
+import { getRequestUser, publicRoute } from '@/server/http/handler'
+import { ok } from '@/server/http/response'
+import { getRequestToken, withExpiredSessionCookie } from '@/server/auth/session'
+import { logout } from '@/server/modules/auth/service'
 
-export async function POST(req: NextRequest) {
-  try {
-    return await logoutRequest(req)
-  } catch (e) {
-    return handleApiError('auth.logout', e)
-  }
-}
-
-export async function DELETE(req: NextRequest) {
-  return POST(req)
-}
-
-export const dynamic = 'force-dynamic'
+// POST /api/auth/logout — sign out (alias of DELETE /api/auth).
+export const POST = publicRoute(async (req) => {
+  await logout(await getRequestUser(req), getRequestToken(req).token, req)
+  return withExpiredSessionCookie(ok({ signedOut: true }))
+})

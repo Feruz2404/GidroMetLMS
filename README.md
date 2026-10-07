@@ -1,118 +1,98 @@
 # GidroEdu LMS
 
-GidroEdu LMS is a multilingual professional-development platform for hydrometeorology specialists. It supports role-aware dashboards, courses and lessons, secure assessments, a digital library, certificate issuance and public verification, notifications, and operational reports.
+A professional-development platform for hydrometeorology specialists: role-aware
+dashboards, a course catalogue with lessons and progress tracking, graded final
+assessments, a digital library of official reference documents, verifiable
+certificates with QR codes, notifications and announcements, and scoped
+reports — in Uzbek, Russian and English, light and dark themes.
 
-The repository is a Next.js 16 App Router application using React 19, TypeScript, Tailwind CSS, Prisma, and one authoritative PostgreSQL schema in every environment.
+Built with Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4,
+shadcn/Radix UI, TanStack Query, Prisma and PostgreSQL.
 
-## Security model
+## What is inside
 
-- Browser sessions use a signed, opaque token in an `HttpOnly`, `SameSite=Lax`, `Secure` production cookie. Legacy bearer sessions are accepted only for compatibility.
-- Session tokens are HMAC-hashed before storage and can be revoked.
-- Passwords use versioned PBKDF2-SHA-256 with 600,000 iterations. Legacy hashes are upgraded after a successful login.
-- Login errors are generic and attempts are rate-limited. For multi-instance production, connect the limiter to a shared edge/Redis store.
-- Server-side permissions and ownership checks protect users, courses, assessments, reports, library resources, and certificates.
-- Certificate scores and eligibility are derived from course, enrollment, and quiz-attempt records; client scores are ignored.
-- Cross-site cookie mutations are rejected using Origin and Fetch Metadata checks.
+| Area | Highlights |
+|---|---|
+| Learning | 18 real courses (162 lessons written for the hydromet service: observations, synoptic analysis, forecasting, hazards, hydrology, discharge measurement, climate statistics, adaptation, satellite & radar, air quality, instruments, data QC, safety), free preview lessons, progress, deadlines, assignments by department. |
+| Assessment | Final test per course (single/multiple choice, true/false, fill-in), server-side grading, shuffled questions, timer, autosave and resume, attempt history, answer review with explanations, quiz builder for instructors. |
+| Certificates | Issued automatically on completion + pass, printable A4 certificate with locally generated QR code, public verification page (`/verify/<code>`), revocation, registry for staff. |
+| Library | 25 official documents (WMO guides and manuals, IPCC AR6, WHO air-quality guidelines, FAO-56, Sendai Framework, Uzbek laws on lex.uz) with filters, bookmarks and download tracking. |
+| Management | Course editor with curriculum builder, quiz builder, user administration, announcements, dashboards and reports (learners, courses, assessments, certificates, library, audit) with CSV export. |
 
-## Roles
+Roles: super administrator, administrator, instructor, department manager,
+learner — see [docs/roles-and-permissions.md](docs/roles-and-permissions.md).
 
-The canonical roles are `super_admin`, `administrator`, `instructor`, `department_manager`, and `learner`. The legacy values `admin`, `tutor`, and `student` remain supported during migration. See [docs/roles-and-permissions.md](docs/roles-and-permissions.md).
+## Quick start (local development)
 
-## Local setup
-
-Requirements: Node.js 22.23.x, npm 10.9.x, PostgreSQL, and Git. The exact versions are pinned in `.nvmrc`, `.node-version`, and `package.json`.
+Requirements: Node.js 22, npm 10+, PostgreSQL 15+ (a local server or Docker).
 
 ```bash
-copy .env.example .env
 npm install
-npm run db:generate
-npm run db:migrate:deploy
-$env:ALLOW_DEMO_SEED="true" # PowerShell
-$env:DEMO_SEED_PASSWORD="<unique-strong-development-password>"
-npm run db:seed:demo
-npm run dev
+cp .env.example .env            # then edit the values (see below)
+npm run db:migrate:deploy        # apply migrations
+npm run db:seed:demo             # real catalogue + fictional demo organisation
+npm run dev                      # http://localhost:3000
 ```
 
-Create a development-only Neon PostgreSQL database, configure its pooled `DATABASE_URL` and matching direct `DIRECT_URL`, and generate a random 32+ character `SESSION_SECRET`. Never reuse Production credentials locally. Vercel Production uses separately scoped `PRODUCTION_NEON_DATABASE_URL` and `PRODUCTION_NEON_DATABASE_URL_UNPOOLED` values supplied by its managed Neon resource.
+Minimal `.env` for local work:
 
-### Development demo accounts
+```dotenv
+DATABASE_URL="postgresql://postgres@localhost:5433/gidroedu?schema=public"
+DIRECT_URL="postgresql://postgres@localhost:5433/gidroedu?schema=public"
+SESSION_SECRET="<random string, 32+ characters>"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+ALLOW_PUBLIC_REGISTRATION="true"
+ALLOW_DEMO_SEED="true"
+DEMO_SEED_PASSWORD="<strong password used for every demo account>"
+```
 
-The idempotent demo seed creates five fictional accounts. They use the strong, environment-specific `DEMO_SEED_PASSWORD`; no demo credential is stored in source control.
+No PostgreSQL service handy? If the PostgreSQL binaries are installed (or
+`PG_BIN` points at them), `npm run db:local -- init` creates a throw-away,
+project-local cluster in `.local/pgdata` on port 5433 (`start`, `stop`,
+`status` are also available).
+
+### Demo accounts
+
+The demo seed creates 48 fictional staff with realistic history. All share the
+`DEMO_SEED_PASSWORD` from your `.env`.
 
 | Role | Email |
 |---|---|
 | Super administrator | `super.admin@demo.gidroedu.uz` |
 | Administrator | `administrator@demo.gidroedu.uz` |
-| Instructor | `instructor@demo.gidroedu.uz` |
-| Department manager | `manager@demo.gidroedu.uz` |
-| Learner | `learner@demo.gidroedu.uz` |
+| Instructor | `instructor@demo.gidroedu.uz` (also `b.tursunov@…`, `g.rahimova@…`) |
+| Department manager | `manager@demo.gidroedu.uz` (Meteorologiya boshqarmasi) |
+| Learner | `learner@demo.gidroedu.uz` (two certificates, courses in progress, deadlines) |
 
-Never run the demo seed in production. It requires `ALLOW_DEMO_SEED=true` locally or `RUN_PREVIEW_SEED=true` on Vercel Preview, plus `DEMO_SEED_PASSWORD`; its environment guard rejects Production.
+Re-running `npm run db:seed:demo` rebuilds the demo users' activity; it is
+blocked in Production.
 
-## Database workflow
+## Scripts
 
-`prisma/schema.prisma` is the only authoritative schema. It uses PostgreSQL, a pooled runtime URL, and a direct migration URL. `npm run db:schema:check` rejects provider drift and validates the schema.
+| Command | Purpose |
+|---|---|
+| `npm run dev` / `build` / `start` | Develop, build (standalone output), run the build. |
+| `npm run typecheck` / `lint` | TypeScript and ESLint. |
+| `npm test` | Unit tests (grading, progress, policies, schemas, i18n completeness, content quality, security helpers). |
+| `npm run test:e2e` | Playwright API and browser tests against a seeded database (reuses a running server). |
+| `npm run content:check` | Validates the authored courses in `prisma/content/courses`. |
+| `npm run screenshot -- <dir> <email> <path…>` | Captures signed-in screenshots (development aid). |
+| `npm run db:*` | Migrations, seeds and guarded operator scripts (see below). |
 
-```bash
-npm run db:generate                 # generate the PostgreSQL client
-npm run db:migrate                  # create/review a local migration
-npm run db:migrate:deploy           # apply committed migrations
-npm run db:migrate:status           # inspect migration state
-```
+Quality gate used in CI: `db:schema:check`, `typecheck`, `lint`, `test`,
+`content:check`, migrate + seed, `build`, `test:e2e`.
 
-Do not use `prisma migrate reset`, `db push`, or the demo seed against Production. Existing databases created with `db push` must be backed up, compared with the baseline, and marked with the documented baseline before the first `migrate deploy`; follow [docs/deployment.md](docs/deployment.md).
+## Production
 
-The production-safe initial administrator command creates an account only when it does not already exist and never changes existing credentials:
-
-```bash
-$env:INITIAL_ADMIN_EMAIL="admin@example.uz"
-$env:INITIAL_ADMIN_PASSWORD="a-unique-strong-password"
-npm run db:seed:admin
-```
-
-After a verified backup and reviewed migrations, the production content initializer can populate the organization catalogue, 18 course categories, 18 complete courses, assessments, 25 library records, announcements, notifications, a certificate template, and safe learner enrollments. It preserves existing records, is resumable and idempotent, and refuses non-PostgreSQL or unapproved environments. Follow the operator sequence in [docs/deployment.md](docs/deployment.md); never add this command to a recurring build.
-
-## Quality checks
-
-```bash
-npm run db:schema:check
-npm run db:generate
-npm run typecheck
-npm run lint
-npm test
-npm run security:audit
-npm run build
-```
-
-## Production and deployment
-
-The Vercel build command is `npm run build:vercel`. It validates matching Neon pooled/direct endpoints without printing secrets, generates Prisma Client from the authoritative schema, applies committed migrations, optionally performs explicitly guarded one-time migration/initialization work, and builds the application.
-
-For an explicit operator-controlled release check:
-
-```bash
-npm ci
-npm run db:generate
-npm run db:migrate:deploy
-npm run build
-```
-
-For standalone VPS hosting, copy `.next/static` and `public` into the standalone bundle (the build script does this), then start with `npm start`. Reverse proxies must preserve `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
-
-Health/readiness is available at `GET /api/health`. It reports database and required-configuration readiness without returning URLs or secret values.
+- Database: PostgreSQL only; the pooled `DATABASE_URL` and direct `DIRECT_URL` (Vercel Production uses the managed `PRODUCTION_NEON_DATABASE_URL*` variables).
+- `SESSION_SECRET` (32+ chars) and `NEXT_PUBLIC_APP_URL` are required; `/api/health` reports readiness without exposing values.
+- Public self-registration is off in production unless `ALLOW_PUBLIC_REGISTRATION=true`.
+- First administrator: `INITIAL_ADMIN_EMAIL=… INITIAL_ADMIN_PASSWORD=… npm run db:seed:admin`.
+- Learning content: the guarded, idempotent `npm run db:init:production-content` installs the real catalogue without touching user data — follow [docs/deployment.md](docs/deployment.md).
 
 ## Documentation
 
-- [Architecture](docs/architecture.md)
+- [Architecture](docs/architecture.md) · [Frontend guide](docs/frontend-guide.md)
 - [Roles and permissions](docs/roles-and-permissions.md)
-- [Deployment and migrations](docs/deployment.md)
-- [Backup and restore](docs/backup-and-restore.md)
-- [User guides](docs/user-guides.md)
-- [Production readiness and known limitations](docs/production-readiness.md)
-
-## Troubleshooting
-
-- `SERVER_CONFIG_ERROR`: configure a 32+ character `SESSION_SECRET`.
-- `DATABASE_URL_NOT_PRODUCTION_READY`: production requires a PostgreSQL URL.
-- `DATABASE_SCHEMA_ERROR`: apply reviewed migrations and re-run the health check.
-- Login loops after an upgrade: clear the legacy `gidroedu_token` local-storage entry and sign in again; new sessions use cookies.
+- [Deployment and migrations](docs/deployment.md) · [Backup and restore](docs/backup-and-restore.md)
+- [User guides](docs/user-guides.md) · [Production readiness](docs/production-readiness.md)

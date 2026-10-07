@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { resolveDatabaseConfiguration } from '../src/lib/environment.js'
+import { resolveDatabaseConfiguration } from '../src/server/config/environment.js'
 
 const database = resolveDatabaseConfiguration(process.env)
 const env = {

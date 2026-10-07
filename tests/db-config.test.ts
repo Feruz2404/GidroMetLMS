@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { getDatabaseConfigStatus, isDatabaseUrlConfigured, isSupportedDatabaseUrl } from '../src/lib/db'
+import { getDatabaseConfigStatus, isDatabaseUrlConfigured, isSupportedDatabaseUrl } from '../src/server/db'
 
 test('treats SQLite file URLs as unsupported', () => {
   assert.equal(isDatabaseUrlConfigured('file:../db/custom.db'), false)
