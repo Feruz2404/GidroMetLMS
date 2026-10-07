@@ -115,3 +115,21 @@ Known limitations (documented, not changed):
 - SQLite (`file:../db/custom.db`) fits a persistent Node host (verified via `npm start`), NOT Vercel serverless (read-only/ephemeral FS). `vercel.json` is present but the real target is a Node server; a hosted DB (Postgres/Turso) is required for Vercel.
 - Unused deps `next-intl`, `z-ai-web-dev-sdk` and z.ai platform scaffolding (`.zscripts/`, `Caddyfile`, `mini-services/`, `bun.lock`) left in place to avoid breaking the platform deploy pipeline.
 - Password hashing is PBKDF2 (demo); TZ specifies Argon2id. Reports `students`/`certificates` are not scoped to a tutor's own courses.
+
+---
+Task ID: 2026-10-06 — clean-architecture refactor, redesign and real content
+Agent: Main Agent (with parallel sub-agents for content and feature UIs)
+Task: Review the whole project, refactor to clean code / clean architecture, redesign the UI professionally, fill the platform with real data and test every part.
+
+Findings fixed:
+- Lesson and quiz content was template-generated (identical boilerplate; correct answers trivially guessable); library had 25 file-less placeholders → replaced by 18 authored courses (162 lessons, ~85k words, 180 questions) and 25 verified official documents (WMO, IPCC, WHO, FAO, UNDRR, lex.uz).
+- Fabricated "mock certificates" were shown to learners as their own → removed.
+- No authoring UI and no section/lesson API → course editor, curriculum builder, quiz builder, library form, assignment by department/learner.
+- In-memory SPA navigation (no URLs, refresh lost state) → App Router pages with server-side session guard and proxy redirect with ?next.
+- Conflicting certificate rules (/auto ignored completion) → one eligibility rule, automatic issuance on completion + pass.
+- Third-party QR service leaked verification codes → QR generated locally; legacy /?view=verify links still redirect (308).
+- Case-sensitive search on PostgreSQL, instructors could attach quizzes to foreign courses, fractional points written to Int columns, 500s on malformed JSON, duplicated error handling in 29 routes → fixed via shared services, zod schemas and a uniform error envelope.
+
+Architecture: src/shared (DTOs, schemas, roles, error codes) · src/server (http, auth, modules/<domain>) · thin app/api controllers · src/features/<domain> (React Query) · design system in components/shared + components/layout · typed uz/ru/en i18n.
+
+Verification: tsc 0 errors, eslint 0 problems, 57 unit tests, content validator, production build, Playwright e2e (API across roles, auth/shell, learner journey to certificate, instructor/admin/manager journeys).

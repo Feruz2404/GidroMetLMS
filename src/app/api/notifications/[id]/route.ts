@@ -1,26 +1,12 @@
-import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
-import { getCurrentUser, ok, err } from '@/lib/auth'
+import { authedRoute } from '@/server/http/handler'
+import { ok } from '@/server/http/response'
+import { markRead, removeNotification } from '@/server/modules/notifications/service'
 
-// PATCH /api/notifications/[id] — mark single as read
-export async function PATCH(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const user = await getCurrentUser(_req)
-    if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-    const { id } = await params
+type Params = { id: string }
 
-    const notif = await db.notification.findUnique({ where: { id } })
-    if (!notif || notif.userId !== user.id) return err(404, 'Bildirishnoma topilmadi')
+export const PATCH = authedRoute<Params>(async (_req, { user, params }) => ok(await markRead(user.id, params.id)))
 
-    await db.notification.update({ where: { id }, data: { isRead: true } })
-    return ok({ id, isRead: true })
-  } catch (e) {
-    if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
-      return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
-    }
-    console.error('Notification update error:', e)
-    return err(500, 'Server xatosi')
-  }
-}
-
-export const dynamic = 'force-dynamic'
+export const DELETE = authedRoute<Params>(async (_req, { user, params }) => {
+  await removeNotification(user.id, params.id)
+  return ok({ deleted: true })
+})

@@ -1,28 +1,6 @@
-import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
-import { getCurrentUser, ok, err } from '@/lib/auth'
+import { authedRoute } from '@/server/http/handler'
+import { ok } from '@/server/http/response'
+import { listCategories } from '@/server/modules/courses/service'
 
-// GET /api/categories — list all categories (for filter dropdowns, course creation forms)
-export async function GET(req: NextRequest) {
-  try {
-    const user = await getCurrentUser(req)
-    if (!user) return err(401, 'Avtorizatsiya talab qilinadi')
-
-    const categories = await db.category.findMany({
-      orderBy: { order: 'asc' },
-      include: {
-        _count: { select: { courses: true } },
-      },
-    })
-
-    return ok(categories)
-  } catch (e) {
-    if (e instanceof Error && (e.message === 'UNAUTHORIZED' || e.message === 'FORBIDDEN')) {
-      return err(e.message === 'FORBIDDEN' ? 403 : 401, e.message === 'FORBIDDEN' ? 'Ruxsat yo\'q' : 'Avtorizatsiya talab qilinadi')
-    }
-    console.error('GET /api/categories error:', e)
-    return err(500, 'Server xatosi')
-  }
-}
-
-export const dynamic = 'force-dynamic'
+// GET /api/categories — active categories with the number of courses visible to the caller.
+export const GET = authedRoute(async (_req, { user }) => ok(await listCategories(user)))

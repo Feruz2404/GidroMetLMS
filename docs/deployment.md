@@ -44,18 +44,19 @@ When replacing an inaccessible legacy Production database, keep its deployment a
 
 ## Production content initialization
 
+The learning catalogue lives in `prisma/content/` (18 authored courses with 9 lessons and a 10-question final assessment each, 25 official reference documents, organisation reference data). `prisma/seed/catalog.ts` installs it with stable identifiers (`production-course-NN`, `…-section-N-lesson-M`, `…-final-quiz`), so a re-run updates the same rows in place.
+
 Run this sequence only from a trusted operator shell connected to the intended Production PostgreSQL database:
 
-1. Confirm provider backup status and verify a fresh logical or provider-managed backup is restorable.
-2. Set `ALLOW_PRODUCTION_CONTENT_INSPECT=true`, run `npm run db:inspect:production-content`, and retain the before-count report.
-3. Run `npm run db:migrate:status`. For the historically `db push`-managed database, complete the reviewed baseline step above before `npm run db:migrate:deploy`.
-4. Review the additive migration SQL, then run `npm run db:migrate:deploy`.
-5. Set `ALLOW_PRODUCTION_CONTENT_INIT=true` only in the current process. Optionally set `INIT_ADMIN_PASSWORD`, `INIT_INSTRUCTOR_PASSWORD`, `INIT_MANAGER_PASSWORD`, and `INIT_LEARNER_PASSWORD` to strong unique values; if omitted, no corresponding fictional account is created.
-6. Run `npm run db:init:production-content` twice. The second after-count report must match the first and the duplicate report must remain empty.
-7. Re-run `npm run db:inspect:production-content`, save the after-count report, and unset all initializer flags and optional passwords.
-8. Deploy the application and verify health, authentication, forced password change for any optional fictional users, the course catalogue/detail/lesson/quiz flows, library, announcements, and certificate template administration.
+1. Confirm provider backup status and verify a fresh backup is restorable.
+2. Set `ALLOW_PRODUCTION_CONTENT_INSPECT=true`, run `npm run db:inspect:production-content`, and keep the before-count report.
+3. Run `npm run db:migrate:status`, review pending SQL, then `npm run db:migrate:deploy`.
+4. Set `ALLOW_PRODUCTION_CONTENT_INIT=true` only in the current process. Optionally set `INIT_ADMIN_PASSWORD`, `INIT_INSTRUCTOR_PASSWORD`, `INIT_MANAGER_PASSWORD` and `INIT_LEARNER_PASSWORD` (strong, unique); without them no starter account is created.
+5. Run `npm run db:init:production-content` twice. The second after-count report must match the first and the duplicate report must stay empty.
+6. Re-run the inspection, save the after-count report, and unset every initializer flag and password.
+7. Deploy and verify health, sign-in, the catalogue, a lesson, an assessment attempt, the library and certificate verification.
 
-The initializer never deletes or truncates data, never resets or pushes the schema, does not overwrite existing credentials, preserves enrollment progress, and uses stable identifiers for repeatable upserts. It performs short record-level operations so an interrupted run can be resumed without holding one long Production transaction.
+Guarantees: the initializer never deletes user data, never resets or pushes the schema and never changes existing credentials. Course text, lessons and library records are upserted; the questions of a final assessment are replaced only while nobody has attempted it, so recorded results always keep the questions they were graded against. Placeholder library records from the first content release (no file) are archived, not deleted. Existing enrolments and progress are preserved; every active learner is enrolled in the introductory and safety courses plus one department-relevant course.
 
 ## VPS / standalone
 
@@ -68,6 +69,27 @@ npm start
 ```
 
 Use the process manager and service name already configured on the server. Do not invent or replace production process names. Configure HTTPS at the reverse proxy and forward the original host/protocol headers.
+
+### Current VPS: `https://gidromet-lms.vrcloud.uz`
+
+The shared Ubuntu 22.04 host (1 vCPU, 1 GB RAM) runs several other projects, so the app is isolated and memory-capped, and it is **built on a workstation, not on the server**.
+
+| Item | Value |
+|---|---|
+| Release layout | `/opt/gidromet-lms/releases/<timestamp>`, `current` → active release, `shared/app.env` (root:gidromet, 640) |
+| Process | `gidromet-lms.service` (systemd, user `gidromet`, `127.0.0.1:3200`, `MemoryMax=400M`, heap 256 MB) |
+| Database | PostgreSQL 14 on the host, database and role `gidromet_lms` (only that role has access) |
+| Proxy / TLS | Caddy block `gidromet-lms.vrcloud.uz` in `/etc/caddy/Caddyfile` (automatic HTTPS; backups `Caddyfile.bak-gidromet-*`) |
+
+Update procedure:
+
+1. On the workstation: `NEXT_PUBLIC_APP_URL=https://gidromet-lms.vrcloud.uz npm run build`. The Prisma generator already includes the `debian-openssl-3.0.x` engine.
+2. Archive `.next/standalone` **without** its `.env`, upload it, and extract it into a new `releases/<timestamp>` directory.
+3. Turbopack links server externals as `.next/node_modules/@prisma/client-<hash>` pointing at the build machine's absolute path. Re-point each link inside the release: `ln -sfn ../../../node_modules/@prisma/client .next/node_modules/@prisma/client-<hash>`.
+4. Apply migrations from the workstation through an SSH tunnel to `127.0.0.1:5432` (`prisma migrate deploy` with the `gidromet_lms` URL), then switch `current` and `sudo systemctl restart gidromet-lms`.
+5. Check `curl -s http://127.0.0.1:3200/api/health` on the host and `https://gidromet-lms.vrcloud.uz/api/health`. Roll back by pointing `current` at the previous release and restarting.
+
+Never run `next build` on this host: it needs more memory than the server has free and could push other services into the OOM killer.
 
 ## Rollback
 

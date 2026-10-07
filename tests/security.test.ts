@@ -1,26 +1,25 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import crypto from 'node:crypto'
+import { hashPassword, needsPasswordRehash, verifyPassword } from '../src/server/auth/password'
 import {
+  extractBearerToken,
   extractSessionCookie,
-  extractToken,
-  hashPassword,
-  needsPasswordRehash,
+  isTrustedRequest,
   serializeExpiredSessionCookie,
   serializeSessionCookie,
-  verifyPassword,
-} from '../src/lib/auth'
-import { hasPermission, PERMISSIONS } from '../src/server/auth/permissions'
-import { consumeRateLimit, resetRateLimit } from '../src/lib/rate-limit'
-import { loginSchema, passwordSchema } from '../src/validators/auth'
-import { safeResourceUrl } from '../src/lib/utils'
+} from '../src/server/auth/session'
+import { consumeRateLimit, resetRateLimit } from '../src/server/auth/rate-limit'
+import { hasPermission, PERMISSIONS } from '../src/shared/roles'
+import { loginSchema, passwordSchema } from '../src/shared/schemas'
+import { safeResourceUrl, youtubeVideoId } from '../src/shared/url'
 import {
   classifyDatabaseUrl,
   describeDatabaseConfiguration,
   resolveApplicationUrl,
   resolveDatabaseConfiguration,
   validateDeploymentEnvironment,
-} from '../src/lib/environment'
+} from '../src/server/config/environment'
 
 test('session cookies are HttpOnly, SameSite, and Secure in production mode', () => {
   const token = 'a'.repeat(96)
@@ -33,22 +32,47 @@ test('session cookies are HttpOnly, SameSite, and Secure in production mode', ()
 })
 
 test('bearer parsing fails closed for malformed authorization headers', () => {
-  assert.equal(extractToken({ headers: new Headers({ authorization: 'abc' }) }), undefined)
-  assert.equal(extractToken({ headers: new Headers({ authorization: `Bearer ${'b'.repeat(96)}` }) }), 'b'.repeat(96))
+  assert.equal(extractBearerToken({ headers: new Headers({ authorization: 'abc' }) }), undefined)
+  assert.equal(extractBearerToken({ headers: new Headers({ authorization: `Bearer ${'b'.repeat(96)}` }) }), 'b'.repeat(96))
 })
 
-test('modern passwords verify and legacy hashes are marked for rehash', () => {
-  const modern = hashPassword('MeteoDemo!2026')
-  assert.equal(verifyPassword('MeteoDemo!2026', modern), true)
+test('session cookies with an unexpected format are ignored', () => {
+  assert.equal(extractSessionCookie({ headers: new Headers({ cookie: 'gidroedu_session=../../etc' }) }), undefined)
+  assert.equal(extractSessionCookie({ headers: new Headers({ cookie: 'other=1' }) }), undefined)
+})
+
+test('cookie-authenticated mutations must come from the same origin', () => {
+  const url = 'http://localhost:3000/api/courses'
+  assert.equal(isTrustedRequest({ method: 'GET', url, headers: new Headers({ origin: 'https://evil.example' }) }), true)
+  assert.equal(isTrustedRequest({ method: 'POST', url, headers: new Headers({ origin: 'https://evil.example' }) }), false)
+  assert.equal(isTrustedRequest({ method: 'POST', url, headers: new Headers({ 'sec-fetch-site': 'cross-site' }) }), false)
+  assert.equal(isTrustedRequest({ method: 'POST', url, headers: new Headers({ origin: 'http://localhost:3000' }) }), true)
+  assert.equal(isTrustedRequest({ method: 'POST', url, headers: new Headers({ authorization: `Bearer ${'c'.repeat(96)}`, origin: 'https://evil.example' }) }), true)
+})
+
+test('modern passwords verify and legacy hashes are marked for rehash', async () => {
+  const modern = await hashPassword('MeteoDemo!2026')
+  assert.equal(await verifyPassword('MeteoDemo!2026', modern), true)
+  assert.equal(await verifyPassword('wrong-password', modern), false)
   assert.equal(needsPasswordRehash(modern), false)
 
   const legacySalt = '0123456789abcdef0123456789abcdef'
   const legacyHash = crypto.pbkdf2Sync('MeteoDemo!2026', legacySalt, 100_000, 64, 'sha512').toString('hex')
-  assert.equal(verifyPassword('MeteoDemo!2026', `${legacySalt}:${legacyHash}`), true)
+  assert.equal(await verifyPassword('MeteoDemo!2026', `${legacySalt}:${legacyHash}`), true)
   assert.equal(needsPasswordRehash(`${legacySalt}:${legacyHash}`), true)
 })
 
+test('malformed password hashes fail closed', async () => {
+  assert.equal(await verifyPassword('Admin@2026', 'not-a-valid-hash'), false)
+  assert.equal(await verifyPassword('Admin@2026', 'salt:abc'), false)
+  assert.equal(await verifyPassword('Admin@2026', 'pbkdf2-sha256$10$salt$zz'), false)
+})
+
 test('role permission matrix separates organization and department reporting', () => {
+  assert.equal(hasPermission('learner', PERMISSIONS.LEARNING_USE), true)
+  assert.equal(hasPermission('student', PERMISSIONS.LEARNING_USE), true)
+  assert.equal(hasPermission('tutor', PERMISSIONS.COURSES_MANAGE_OWN), true)
+  assert.equal(hasPermission('unknown-role', PERMISSIONS.LEARNING_USE), false)
   assert.equal(hasPermission('super_admin', PERMISSIONS.SYSTEM_MANAGE), true)
   assert.equal(hasPermission('administrator', PERMISSIONS.USERS_MANAGE), true)
   assert.equal(hasPermission('instructor', PERMISSIONS.COURSES_MANAGE_OWN), true)
@@ -73,9 +97,18 @@ test('login rate limiting rejects attempts beyond the configured limit', () => {
 
 test('resource URLs reject executable and protocol-relative values', () => {
   assert.equal(safeResourceUrl('javascript:alert(1)'), null)
+  assert.equal(safeResourceUrl('data:text/html,hi'), null)
   assert.equal(safeResourceUrl('//evil.example/file.pdf'), null)
+  assert.equal(safeResourceUrl('http://example.com/file.pdf'), null)
   assert.equal(safeResourceUrl('/uploads/file.pdf'), '/uploads/file.pdf')
   assert.equal(safeResourceUrl('https://example.com/file.pdf'), 'https://example.com/file.pdf')
+})
+
+test('YouTube links resolve to a video id for privacy-enhanced embeds', () => {
+  assert.equal(youtubeVideoId('https://www.youtube.com/watch?v=dQw4w9WgXcQ'), 'dQw4w9WgXcQ')
+  assert.equal(youtubeVideoId('https://youtu.be/dQw4w9WgXcQ'), 'dQw4w9WgXcQ')
+  assert.equal(youtubeVideoId('https://www.youtube.com/embed/dQw4w9WgXcQ'), 'dQw4w9WgXcQ')
+  assert.equal(youtubeVideoId('https://vimeo.com/123'), null)
 })
 
 test('preview environment resolves pooled, direct, and dynamic application URLs', () => {

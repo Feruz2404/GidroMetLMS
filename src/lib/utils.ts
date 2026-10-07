@@ -1,20 +1,14 @@
-import { clsx, type ClassValue } from "clsx"
-import { twMerge } from "tailwind-merge"
+import { clsx, type ClassValue } from 'clsx'
+import { twMerge } from 'tailwind-merge'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function safeResourceUrl(value: string | null | undefined): string | null {
-  if (!value) return null
-  const candidate = value.trim()
-  if (candidate.startsWith('/') && !candidate.startsWith('//')) return candidate
-  try {
-    const url = new URL(candidate)
-    if (url.protocol === 'https:') return url.toString()
-    if (url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(url.hostname)) return url.toString()
-  } catch {
-    return null
-  }
-  return null
+export function initials(firstName?: string | null, lastName?: string | null): string {
+  return `${firstName?.trim()[0] ?? ''}${lastName?.trim()[0] ?? ''}`.toUpperCase() || '?'
+}
+
+export function personName(user: { firstName: string; lastName: string; middleName?: string | null }, withMiddle = false): string {
+  return [user.lastName, user.firstName, withMiddle ? user.middleName : null].filter(Boolean).join(' ')
 }

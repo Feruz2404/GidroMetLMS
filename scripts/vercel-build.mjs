@@ -3,7 +3,7 @@ import {
   resolveApplicationUrl,
   resolveDatabaseConfiguration,
   validateDeploymentEnvironment,
-} from '../src/lib/environment.js'
+} from '../src/server/config/environment.js'
 
 function run(command, args, env) {
   console.info(`[vercel-build] ${command} ${args.join(' ')}`)

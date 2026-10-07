@@ -1,6 +1,5 @@
-import { NextResponse } from 'next/server'
+import { publicRoute } from '@/server/http/handler'
+import { ok } from '@/server/http/response'
 
-// GET /api — health check endpoint
-export async function GET() {
-  return NextResponse.json({ status: 'ok', timestamp: new Date().toISOString() })
-}
+// GET /api — liveness probe (readiness lives at /api/health).
+export const GET = publicRoute(async () => ok({ status: 'ok', timestamp: new Date().toISOString() }))
